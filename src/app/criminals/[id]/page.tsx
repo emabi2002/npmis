@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
-import Link from "next/link"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   User as UserIcon,
   MapPin,
@@ -26,166 +26,91 @@ import {
   Printer,
   Download,
   Eye,
-  Clock,
   Scale,
   Car,
   Home,
   Target,
   Activity,
+  CheckCircle,
+} from "lucide-react";
+import type { User as UserType } from "@/types/user";
 
-  CheckCircle
-} from "lucide-react"
-import type { User as UserType } from "@/types/user"
-
-// TypeScript interfaces for criminal data
+/* ----------------------------- Types ----------------------------- */
 interface CaseHistoryItem {
-  caseId: string
-  title: string
-  date: string
-  status: string
-  role: string
-  charges: string[]
+  caseId: string;
+  title: string;
+  date: string;
+  status: string;
+  role: string;
+  charges: string[];
 }
 
 interface ArrestHistoryItem {
-  date: string
-  location: string
-  charges: string[]
-  outcome: string
-  arrestingOfficer: string
+  date: string;
+  location: string;
+  charges: string[];
+  outcome: string;
+  arrestingOfficer: string;
 }
 
 interface Criminal {
-  id: string
-  firstName: string
-  lastName: string
-  aliases: string[]
-  dateOfBirth: string
-  age: number
-  gender: string
-  nationality: string
-  province: string
-  district: string
-  village: string
-  height: string
-  weight: string
-  eyeColor: string
-  hairColor: string
-  scarsMarks: string
-  tattoos: string
-  physicalDescription: string
-  threatLevel: string
-  status: string
-  charges: string[]
-  convictions: number
-  gangAffiliation: string
-  armedAndDangerous: boolean
-  hasFingerprints: boolean
-  hasPhoto: boolean
-  photo?: string
-  hasDNA: boolean
-  biometricNotes: string
-  knownAddresses: string[]
-  phoneNumbers: string[]
-  associatedVehicles: string[]
-  knownAssociates: string[]
-  familyMembers: string[]
-  emergencyContact: string
-  warrants: string[]
-  courtCases: string[]
-  probationOfficer: string
-  lastArrest: string
-  knownHabits: string
-  frequentLocations: string
-  operatingMethods: string
-  riskAssessment: string
-  lastSeen: string
-  lastSeenDate: string
-  lastSeenBy: string
-  addedBy: string
-  dateAdded: string
-  lastUpdated: string
-  notes: string
-  caseHistory: CaseHistoryItem[]
-  arrestHistory: ArrestHistoryItem[]
+  id: string;
+  firstName: string;
+  lastName: string;
+  aliases: string[];
+  dateOfBirth: string;
+  age: number;
+  gender: string;
+  nationality: string;
+  province: string;
+  district: string;
+  village: string;
+  height: string;
+  weight: string;
+  eyeColor: string;
+  hairColor: string;
+  scarsMarks: string;
+  tattoos: string;
+  physicalDescription: string;
+  threatLevel: string; // "extreme" | "high" | "medium" | "low"
+  status: string; // "Wanted" | ...
+  charges: string[];
+  convictions: number;
+  gangAffiliation: string;
+  armedAndDangerous: boolean;
+  hasFingerprints: boolean;
+  hasPhoto: boolean;
+  photo?: string;
+  hasDNA: boolean;
+  biometricNotes: string;
+  knownAddresses: string[];
+  phoneNumbers: string[];
+  associatedVehicles: string[];
+  knownAssociates: string[];
+  familyMembers: string[];
+  emergencyContact: string;
+  warrants: string[];
+  courtCases: string[];
+  probationOfficer: string;
+  lastArrest: string;
+  knownHabits: string;
+  frequentLocations: string;
+  operatingMethods: string;
+  riskAssessment: string;
+  lastSeen: string;
+  lastSeenDate: string;
+  lastSeenBy: string;
+  addedBy: string;
+  dateAdded: string;
+  lastUpdated: string;
+  notes: string;
+  caseHistory: CaseHistoryItem[];
+  arrestHistory: ArrestHistoryItem[];
 }
 
-// TypeScript interfaces for criminal data
-interface CaseHistoryItem {
-  caseId: string
-  title: string
-  date: string
-  status: string
-  role: string
-  charges: string[]
-}
-
-interface ArrestHistoryItem {
-  date: string
-  location: string
-  charges: string[]
-  outcome: string
-  arrestingOfficer: string
-}
-
-interface Criminal {
-  id: string
-  firstName: string
-  lastName: string
-  aliases: string[]
-  dateOfBirth: string
-  age: number
-  gender: string
-  nationality: string
-  province: string
-  district: string
-  village: string
-  height: string
-  weight: string
-  eyeColor: string
-  hairColor: string
-  scarsMarks: string
-  tattoos: string
-  physicalDescription: string
-  threatLevel: string
-  status: string
-  charges: string[]
-  convictions: number
-  gangAffiliation: string
-  armedAndDangerous: boolean
-  hasFingerprints: boolean
-  hasPhoto: boolean
-  photo?: string
-  hasDNA: boolean
-  biometricNotes: string
-  knownAddresses: string[]
-  phoneNumbers: string[]
-  associatedVehicles: string[]
-  knownAssociates: string[]
-  familyMembers: string[]
-  emergencyContact: string
-  warrants: string[]
-  courtCases: string[]
-  probationOfficer: string
-  lastArrest: string
-  knownHabits: string
-  frequentLocations: string
-  operatingMethods: string
-  riskAssessment: string
-  lastSeen: string
-  lastSeenDate: string
-  lastSeenBy: string
-  addedBy: string
-  dateAdded: string
-  lastUpdated: string
-  notes: string
-  caseHistory: CaseHistoryItem[]
-  arrestHistory: ArrestHistoryItem[]
-}
-
-// Mock criminal data - in real app this would come from database
+/* --------------------- Mock data (demo only) --------------------- */
 const getCriminalData = (id: string) => {
-  const criminals = {
+  const criminals: Record<string, Criminal> = {
     "CRIM-001": {
       id: "CRIM-001",
       firstName: "John",
@@ -235,7 +160,8 @@ const getCriminalData = (id: string) => {
       addedBy: "Det. Sarah Johnson",
       dateAdded: "2020-03-20",
       lastUpdated: "2024-01-15",
-      notes: "Subject is considered extremely dangerous. Use caution when approaching. Has history of resisting arrest.",
+      notes:
+        "Subject is considered extremely dangerous. Use caution when approaching. Has history of resisting arrest.",
       caseHistory: [
         {
           caseId: "CASE-2024-001",
@@ -243,7 +169,7 @@ const getCriminalData = (id: string) => {
           date: "2024-01-10",
           status: "Active",
           role: "Primary Suspect",
-          charges: ["Armed Robbery", "Assault"]
+          charges: ["Armed Robbery", "Assault"],
         },
         {
           caseId: "CASE-2022-156",
@@ -251,7 +177,7 @@ const getCriminalData = (id: string) => {
           date: "2022-08-15",
           status: "Convicted",
           role: "Defendant",
-          charges: ["Assault", "Intimidation"]
+          charges: ["Assault", "Intimidation"],
         },
         {
           caseId: "CASE-2020-089",
@@ -259,8 +185,8 @@ const getCriminalData = (id: string) => {
           date: "2020-05-22",
           status: "Convicted",
           role: "Defendant",
-          charges: ["Theft", "Damage to Property"]
-        }
+          charges: ["Theft", "Damage to Property"],
+        },
       ],
       arrestHistory: [
         {
@@ -268,55 +194,51 @@ const getCriminalData = (id: string) => {
           location: "Gerehu Stage 4",
           charges: ["Assault", "Intimidation"],
           outcome: "Convicted - 18 months imprisonment",
-          arrestingOfficer: "Sgt. Michael Kila"
+          arrestingOfficer: "Sgt. Michael Kila",
         },
         {
           date: "2020-05-22",
           location: "Boroko Market",
           charges: ["Theft", "Damage to Property"],
           outcome: "Convicted - 12 months suspended sentence",
-          arrestingOfficer: "Const. David Bani"
+          arrestingOfficer: "Const. David Bani",
         },
         {
           date: "2020-03-20",
           location: "Waigani",
           charges: ["Public Disturbance"],
           outcome: "Released - Warning issued",
-          arrestingOfficer: "Const. Helen Siaguru"
-        }
-      ]
-    }
-  }
+          arrestingOfficer: "Const. Helen Siaguru",
+        },
+      ],
+    },
+  };
 
-  return criminals[id as keyof typeof criminals] || null
-}
+  return criminals[id] || null;
+};
 
+/* ============================== Page ============================== */
 export default function CriminalProfilePage() {
-  const [user, setUser] = useState<UserType | null>(null)
-  const [criminal, setCriminal] = useState<Criminal | null>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-  const params = useParams()
+  const [user, setUser] = useState<UserType | null>(null);
+  const [criminal, setCriminal] = useState<Criminal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const params = useParams();
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
+    const userData = localStorage.getItem("user");
     if (!userData) {
-      router.push("/")
-      return
+      router.push("/");
+      return;
     }
-    setUser(JSON.parse(userData))
+    setUser(JSON.parse(userData));
 
-    // Load criminal data
-    const criminalData = getCriminalData(params.id as string)
-    if (criminalData) {
-      setCriminal(criminalData)
-    }
-    setLoading(false)
-  }, [router, params.id])
+    const criminalData = getCriminalData(params.id as string);
+    if (criminalData) setCriminal(criminalData);
+    setLoading(false);
+  }, [router, params.id]);
 
-  if (!user || loading) {
-    return <div>Loading...</div>
-  }
+  if (!user || loading) return <div>Loading...</div>;
 
   if (!criminal) {
     return (
@@ -334,18 +256,123 @@ export default function CriminalProfilePage() {
           </Card>
         </div>
       </DashboardLayout>
-    )
+    );
   }
 
   const getThreatLevelBadge = (level: string) => {
     const variants = {
-      "extreme": "destructive" as const,
-      "high": "destructive" as const,
-      "medium": "default" as const,
-      "low": "secondary" as const
+      extreme: "destructive" as const,
+      high: "destructive" as const,
+      medium: "default" as const,
+      low: "secondary" as const,
+    };
+    return variants[level as keyof typeof variants] || "default";
+  };
+
+  /* ---------------------- Actions: Print / Export / Edit ---------------------- */
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Opens a clean printable page and triggers the print dialog. User can select “Save as PDF”.
+  const handleExportPDF = () => {
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Popup blocked. Please allow popups to export PDF.");
+      return;
     }
-    return variants[level as keyof typeof variants] || "default"
-  }
+
+    const css = `
+      @page { size: A4; margin: 16mm; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111827; }
+      h1 { font-size:22px; margin:0 0 4px; }
+      h2 { font-size:16px; margin:16px 0 8px; }
+      .muted { color:#6b7280; }
+      .box { border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin-top:12px; }
+      .row { display:flex; gap:16px; }
+      .col { flex:1 1 0; }
+      .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; color:#fff; margin-right:6px; }
+      .red { background:#dc2626; } .orange { background:#ea580c; } .gray { background:#6b7280; } .blue { background:#1f2937; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { padding:6px 8px; border-bottom:1px solid #f3f4f6; font-size:13px; text-align:left; }
+      .pills span { display:inline-block; border:1px solid #e5e7eb; padding:2px 8px; border-radius:999px; margin:0 6px 6px 0; font-size:12px; }
+    `;
+
+    const threatClass =
+      criminal.threatLevel === "extreme" || criminal.threatLevel === "high"
+        ? "red"
+        : criminal.threatLevel === "medium"
+        ? "orange"
+        : "gray";
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${criminal.id} – ${criminal.firstName} ${criminal.lastName}</title>
+  <style>${css}</style>
+</head>
+<body>
+  <h1>${criminal.firstName} ${criminal.lastName}</h1>
+  <div class="muted">ID: ${criminal.id}</div>
+  <div style="margin-top:8px;">
+    <span class="chip ${threatClass}">${criminal.threatLevel.toUpperCase()} THREAT</span>
+    <span class="chip ${criminal.status === "Wanted" ? "red" : "gray"}">${criminal.status}</span>
+    ${criminal.armedAndDangerous ? `<span class="chip red">Armed & Dangerous</span>` : ``}
+    ${criminal.gangAffiliation ? `<span class="chip blue">Gang: ${criminal.gangAffiliation}</span>` : ``}
+  </div>
+
+  <div class="row">
+    <div class="col box">
+      <h2>Personal Information</h2>
+      <table>
+        <tr><th style="width:160px">Full Name</th><td>${criminal.firstName} ${criminal.lastName}</td></tr>
+        <tr><th>DOB</th><td>${criminal.dateOfBirth}</td></tr>
+        <tr><th>Age / Gender</th><td>${criminal.age} / ${criminal.gender}</td></tr>
+        <tr><th>Nationality</th><td>${criminal.nationality}</td></tr>
+        <tr><th>Province</th><td>${criminal.province}</td></tr>
+        <tr><th>District</th><td>${criminal.district}</td></tr>
+        <tr><th>Village</th><td>${criminal.village || "-"}</td></tr>
+        <tr><th>Aliases</th><td>${criminal.aliases?.length ? criminal.aliases.join(", ") : "-"}</td></tr>
+      </table>
+    </div>
+
+    <div class="col box">
+      <h2>Criminal Status</h2>
+      <table>
+        <tr><th style="width:160px">Threat Level</th><td>${criminal.threatLevel.toUpperCase()}</td></tr>
+        <tr><th>Current Status</th><td>${criminal.status}</td></tr>
+        <tr><th>Gang Affiliation</th><td>${criminal.gangAffiliation || "None"}</td></tr>
+        <tr><th>Convictions</th><td>${criminal.convictions}</td></tr>
+        <tr><th>Last Arrest</th><td>${criminal.lastArrest || "-"}</td></tr>
+        <tr><th>Probation Officer</th><td>${criminal.probationOfficer || "-"}</td></tr>
+        <tr><th>Last Seen</th><td>${criminal.lastSeenDate} — ${criminal.lastSeen}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>Current Charges</h2>
+    <div class="pills">
+      ${criminal.charges.map((c) => `<span>${c}</span>`).join("")}
+    </div>
+  </div>
+
+  <script>setTimeout(() => window.print(), 300);</script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
+
+  const handleEdit = () => {
+    router.push(`/criminals/${encodeURIComponent(criminal.id)}/edit`);
+  };
+
+  /* ------------------------------ Render ------------------------------ */
 
   return (
     <DashboardLayout>
@@ -356,13 +383,16 @@ export default function CriminalProfilePage() {
             <Avatar className="w-20 h-20">
               <AvatarImage src={criminal.photo} />
               <AvatarFallback className="bg-gray-200 text-2xl">
-                {criminal.firstName[0]}{criminal.lastName[0]}
+                {criminal.firstName[0]}
+                {criminal.lastName[0]}
               </AvatarFallback>
             </Avatar>
 
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <h1 className="text-3xl font-bold">{criminal.firstName} {criminal.lastName}</h1>
+                <h1 className="text-3xl font-bold">
+                  {criminal.firstName} {criminal.lastName}
+                </h1>
                 <Badge variant="outline">ID: {criminal.id}</Badge>
                 {criminal.armedAndDangerous && (
                   <Badge variant="destructive" className="animate-pulse">
@@ -415,16 +445,17 @@ export default function CriminalProfilePage() {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline">
+          {/* Actions */}
+          <div className="no-print flex gap-2">
+            <Button variant="outline" onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExportPDF}>
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
-            <Button>
+            <Button onClick={handleEdit}>
               <Edit className="w-4 h-4 mr-2" />
               Edit Profile
             </Button>
@@ -487,7 +518,9 @@ export default function CriminalProfilePage() {
                   <div className="grid gap-2">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Full Name:</span>
-                      <span className="font-medium">{criminal.firstName} {criminal.lastName}</span>
+                      <span className="font-medium">
+                        {criminal.firstName} {criminal.lastName}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Date of Birth:</span>
@@ -538,7 +571,9 @@ export default function CriminalProfilePage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Current Status:</span>
-                      <Badge variant={criminal.status === "Wanted" ? "destructive" : "default"}>
+                      <Badge
+                        variant={criminal.status === "Wanted" ? "destructive" : "default"}
+                      >
                         {criminal.status}
                       </Badge>
                     </div>
@@ -861,7 +896,7 @@ export default function CriminalProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {criminal.caseHistory.map((case_: CaseHistoryItem, index: number) => (
+                  {criminal.caseHistory.map((case_, index) => (
                     <div key={index} className="p-4 border rounded-lg">
                       <div className="flex justify-between items-start mb-2">
                         <div>
@@ -880,7 +915,8 @@ export default function CriminalProfilePage() {
                           <span className="text-gray-600">Role:</span> {case_.role}
                         </div>
                         <div>
-                          <span className="text-gray-600">Charges:</span> {case_.charges.join(", ")}
+                          <span className="text-gray-600">Charges:</span>{" "}
+                          {case_.charges.join(", ")}
                         </div>
                       </div>
                     </div>
@@ -898,18 +934,23 @@ export default function CriminalProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {criminal.arrestHistory.map((arrest: ArrestHistoryItem, index: number) => (
+                  {criminal.arrestHistory.map((arrest, index) => (
                     <div key={index} className="p-4 border rounded-lg">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h4 className="font-medium">Arrest #{criminal.arrestHistory.length - index}</h4>
-                          <p className="text-sm text-gray-600">{arrest.date} - {arrest.location}</p>
+                          <h4 className="font-medium">
+                            Arrest #{criminal.arrestHistory.length - index}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            {arrest.date} - {arrest.location}
+                          </p>
                         </div>
                         <Badge variant="outline">{arrest.charges.join(", ")}</Badge>
                       </div>
                       <div className="grid gap-2 md:grid-cols-2 text-sm">
                         <div>
-                          <span className="text-gray-600">Arresting Officer:</span> {arrest.arrestingOfficer}
+                          <span className="text-gray-600">Arresting Officer:</span>{" "}
+                          {arrest.arrestingOfficer}
                         </div>
                         <div>
                           <span className="text-gray-600">Outcome:</span> {arrest.outcome}
@@ -934,7 +975,10 @@ export default function CriminalProfilePage() {
                 <CardContent>
                   <div className="space-y-2">
                     {criminal.knownAssociates.map((associate: string, index: number) => (
-                      <div key={index} className="flex justify-between items-center p-2 border rounded">
+                      <div
+                        key={index}
+                        className="flex justify-between items-center p-2 border rounded"
+                      >
                         <span>{associate}</span>
                         <Button size="sm" variant="outline">
                           <Eye className="w-4 h-4" />
@@ -997,7 +1041,7 @@ export default function CriminalProfilePage() {
                 <Eye className="w-4 h-4 mr-2" />
                 Add Sighting
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleEdit}>
                 <Edit className="w-4 h-4 mr-2" />
                 Update Information
               </Button>
@@ -1005,6 +1049,15 @@ export default function CriminalProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Hide action buttons when printing */}
+      <style jsx global>{`
+        @media print {
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
     </DashboardLayout>
-  )
+  );
 }

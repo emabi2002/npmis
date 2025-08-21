@@ -85,14 +85,12 @@ const distKm = (a: LatLng, b: LatLng) => {
 }
 const insideFence = (pos: LatLng, zone: GeoFence) => distKm(pos, zone.center) <= zone.radiusKm
 
-// Fallback clamp to PNG bbox
 const PNG_BBOX = { minLat: -11.0, maxLat: -2.0, minLng: 141.0, maxLng: 155.9 }
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 type Bounds = { minLat: number; maxLat: number; minLng: number; maxLng: number }
 
 // Tighter inland rectangles to keep demo units off water
 const AREA_BOUNDS: Record<string, Bounds> = {
-  // NOTE: minLng moved to 147.14 so we never include the harbor/sea
   NCD: { minLat: -9.55, maxLat: -9.35, minLng: 147.14, maxLng: 147.28 },
   Morobe: { minLat: -6.81, maxLat: -6.64, minLng: 146.93, maxLng: 147.07 },
   "Eastern Highlands": { minLat: -6.12, maxLat: -6.03, minLng: 145.34, maxLng: 145.45 },
@@ -102,11 +100,11 @@ const clampToBounds = (p: LatLng, b: Bounds): LatLng => ({
   lng: clamp(p.lng, b.minLng, b.maxLng),
 })
 
-// Gentle “urban anchor” to counter drift toward edges/coastlines
+// Gentle “urban anchor”
 const URBAN_ANCHOR: Record<string, LatLng> = {
-  NCD: { lat: -9.45, lng: 147.18 },              // Waigani/Boroko
-  Morobe: { lat: -6.73, lng: 146.99 },           // Lae CBD
-  "Eastern Highlands": { lat: -6.08, lng: 145.39 }, // Goroka
+  NCD: { lat: -9.45, lng: 147.18 },
+  Morobe: { lat: -6.73, lng: 146.99 },
+  "Eastern Highlands": { lat: -6.08, lng: 145.39 },
 }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const nudgeToward = (p: LatLng, target: LatLng, t = 0.12): LatLng => ({
@@ -125,7 +123,7 @@ const seedFleet = (): Vehicle[] => [
     province: "NCD",
     stationId: "S-NCD-01",
     status: "active",
-    pos: { lat: -9.45, lng: 147.18 }, // inland Waigani
+    pos: { lat: -9.45, lng: 147.18 },
     history: [],
     telemetry: { speedKph: 32, fuelPct: 72, headingDeg: 80, lastSeen: new Date().toISOString(), engineCut: false },
     geofences: ["Z-NCD"],
@@ -139,7 +137,7 @@ const seedFleet = (): Vehicle[] => [
     province: "Morobe",
     stationId: "S-MRB-01",
     status: "idle",
-    pos: { lat: -6.73, lng: 146.99 }, // inland Lae
+    pos: { lat: -6.73, lng: 146.99 },
     history: [],
     telemetry: { speedKph: 0, fuelPct: 54, headingDeg: 150, lastSeen: new Date().toISOString(), engineCut: false },
     geofences: ["Z-LAE"],
@@ -153,7 +151,7 @@ const seedFleet = (): Vehicle[] => [
     province: "Eastern Highlands",
     stationId: "S-EHG-01",
     status: "maintenance",
-    pos: { lat: -6.08, lng: 145.39 }, // Goroka
+    pos: { lat: -6.08, lng: 145.39 },
     history: [],
     telemetry: { speedKph: 0, fuelPct: 15, headingDeg: 20, lastSeen: new Date().toISOString(), engineCut: true },
     geofences: ["Z-GOR"],
@@ -170,7 +168,6 @@ const loadFleet = (): Vehicle[] => {
             lat: clamp(v.pos.lat, PNG_BBOX.minLat, PNG_BBOX.maxLat),
             lng: clamp(v.pos.lng, PNG_BBOX.minLng, PNG_BBOX.maxLng),
           }
-      // pull slightly toward the city core so points stay inland
       const anchor = URBAN_ANCHOR[v.province]
       if (anchor) pos = nudgeToward(pos, anchor, 0.20)
       return { ...v, pos }
@@ -326,23 +323,30 @@ export default function FleetManagementPage() {
 
   /* ============== Live simulation ============== */
   useEffect(() => {
-    if (!live) return
+    if (!live) return;
+
     const t = setInterval(() => {
       setVehicles(prev => {
         const next = prev.map(v => {
           if (v.status === "maintenance" || v.status === "offline" || v.telemetry.engineCut) {
-            return { ...v, telemetry: { ...v.telemetry, speedKph: 0, lastSeen: new Date().toISOString() } }
+            return {
+              ...v,
+              telemetry: { ...v.telemetry, speedKph: 0, lastSeen: new Date().toISOString() }
+            }
           }
 
           // constrained random walk
-          const step = 0.005 // ~500m
+          const step = 0.005
           const dLat = (Math.random() - 0.5) * step
           const dLng = (Math.random() - 0.5) * step
 
           let pos: LatLng = { lat: v.pos.lat + dLat, lng: v.pos.lng + dLng }
           const b = AREA_BOUNDS[v.province]
           if (b) pos = clampToBounds(pos, b)
-          else pos = { lat: clamp(pos.lat, PNG_BBOX.minLat, PNG_BBOX.maxLat), lng: clamp(pos.lng, PNG_BBOX.minLng, PNG_BBOX.maxLng) }
+          else pos = {
+            lat: clamp(pos.lat, PNG_BBOX.minLat, PNG_BBOX.maxLat),
+            lng: clamp(pos.lng, PNG_BBOX.minLng, PNG_BBOX.maxLng)
+          }
 
           // subtle magnet to keep units inland/central
           const anchor = URBAN_ANCHOR[v.province]
@@ -369,10 +373,12 @@ export default function FleetManagementPage() {
             }
           }
         })
+
         saveFleet(next)
         return next
       })
     }, 2000)
+
     return () => clearInterval(t)
   }, [live])
 
@@ -487,7 +493,9 @@ export default function FleetManagementPage() {
               {live ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               {live ? "Pause Live" : "Resume Live"}
             </Button>
-            <Link href="/vehicles/new">
+
+            {/* Link now points to /fleet/new (ensure this page exists at app/fleet/new/page.tsx) */}
+            <Link href="/fleet/new">
               <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4" /> New Vehicle
               </Button>

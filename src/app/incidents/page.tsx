@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -26,19 +25,16 @@ import {
   Eye,
   Clock,
   MapPin,
-  UserIcon,
   FileText,
-  Phone,
   Calendar,
-  Shield,
-  Car,
-  Users,
   Target,
-  Activity
+  Activity,
+  Download,
+  Printer,          // ➜ added
 } from "lucide-react"
 import type { User } from "@/types/user"
 
-// Mock incident data
+/* ---------------- Mock incident data ---------------- */
 const MOCK_INCIDENTS = [
   {
     id: "INC-2024-001",
@@ -107,18 +103,53 @@ const MOCK_INCIDENTS = [
   }
 ]
 
-const INCIDENT_TYPES = [
-  "Armed Robbery", "Domestic Violence", "Traffic Accident", "Breaking & Entering",
-  "Public Disturbance", "Assault", "Theft", "Drug Related", "Missing Person",
-  "Tribal Fighting", "Fraud", "Vandalism", "Noise Complaint"
-]
-
 const STATUS_OPTIONS = ["All", "Active", "Under Investigation", "Pending Review", "Resolved", "Closed"]
 const PRIORITY_OPTIONS = ["All", "High", "Medium", "Low"]
 
+/* ---------------- Helpers ---------------- */
+const downloadBlob = (filename: string, blob: Blob) => {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const toCSV = (rows: any[]) => {
+  const headers = [
+    "Incident ID",
+    "Type",
+    "Location",
+    "Status",
+    "Priority",
+    "Assigned To",
+    "Reported By",
+    "Reported At",
+    "Witnesses",
+    "Evidence"
+  ]
+  const body = rows.map(r => [
+    r.id,
+    r.type,
+    r.location,
+    r.status,
+    r.priority,
+    r.assignedTo,
+    r.reportedBy,
+    r.reportedAt,
+    r.witnesses,
+    r.evidence
+  ])
+  const csv = [headers, ...body]
+    .map(line => line.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n")
+  return new Blob([csv], { type: "text/csv;charset=utf-8" })
+}
+
 export default function IncidentsPage() {
   const [user, setUser] = useState<User | null>(null)
-  const [incidents, setIncidents] = useState(MOCK_INCIDENTS)
+  const [incidents] = useState(MOCK_INCIDENTS)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [priorityFilter, setPriorityFilter] = useState("All")
@@ -134,15 +165,25 @@ export default function IncidentsPage() {
     setUser(JSON.parse(userData))
   }, [router])
 
-  const filteredIncidents = incidents.filter(incident => {
-    const matchesSearch = incident.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.location.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "All" || incident.status === statusFilter
-    const matchesPriority = priorityFilter === "All" || incident.priority === priorityFilter
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter(incident => {
+      const q = searchTerm.toLowerCase()
+      const matchesSearch =
+        incident.id.toLowerCase().includes(q) ||
+        incident.type.toLowerCase().includes(q) ||
+        incident.location.toLowerCase().includes(q) ||
+        incident.assignedTo.toLowerCase().includes(q)
 
-    return matchesSearch && matchesStatus && matchesPriority
-  })
+      const matchesStatus = statusFilter === "All" || incident.status === statusFilter
+      const matchesPriority = priorityFilter === "All" || incident.priority === priorityFilter
+      return matchesSearch && matchesStatus && matchesPriority
+    })
+  }, [incidents, searchTerm, statusFilter, priorityFilter])
+
+  const resolutionRate = useMemo(() => {
+    const done = incidents.filter(i => i.status === "Resolved" || i.status === "Closed").length
+    return incidents.length ? Math.round((done / incidents.length) * 100) : 0
+  }, [incidents])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -164,9 +205,18 @@ export default function IncidentsPage() {
     }
   }
 
-  if (!user) {
-    return <div>Loading...</div>
+  /* ---------- Export actions ---------- */
+  const handleExportReport = () => {
+    const blob = toCSV(filteredIncidents)
+    downloadBlob(`incident_report_${new Date().toISOString().slice(0,10)}.csv`, blob)
   }
+
+  const handleExportIncident = (incident: any) => {
+    const blob = new Blob([JSON.stringify(incident, null, 2)], { type: "application/json" })
+    downloadBlob(`${incident.id}.json`, blob)
+  }
+
+  if (!user) return <div>Loading...</div>
 
   return (
     <DashboardLayout>
@@ -180,7 +230,7 @@ export default function IncidentsPage() {
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href="/incidents/missing-person">
-                <UserIcon className="w-4 h-4 mr-2" />
+                <Activity className="w-4 h-4 mr-2" />
                 Missing Person
               </Link>
             </Button>
@@ -240,7 +290,7 @@ export default function IncidentsPage() {
               <Target className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">76%</div>
+              <div className="text-2xl font-bold">{resolutionRate}%</div>
               <p className="text-xs text-green-600">This month</p>
             </CardContent>
           </Card>
@@ -273,7 +323,7 @@ export default function IncidentsPage() {
                 <label className="text-sm font-medium">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map(status => (
@@ -287,7 +337,7 @@ export default function IncidentsPage() {
                 <label className="text-sm font-medium">Priority</label>
                 <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
                     {PRIORITY_OPTIONS.map(priority => (
@@ -299,8 +349,8 @@ export default function IncidentsPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Quick Actions</label>
-                <Button variant="outline" className="w-full">
-                  <Activity className="w-4 h-4 mr-2" />
+                <Button variant="outline" className="w-full" onClick={handleExportReport} title="Export filtered incidents to CSV">
+                  <Download className="w-4 h-4 mr-2" />
                   Export Report
                 </Button>
               </div>
@@ -358,39 +408,70 @@ export default function IncidentsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
+                          {/* VIEW (navigates to detail page) */}
+                          <Link href={`/incidents/${encodeURIComponent(incident.id)}`} title="View details">
+                            <Button size="sm" variant="outline">
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                          </Link>
+
+                          {/* REPORT (print-friendly; Save as PDF) */}
+                          <Link href={`/incidents/${encodeURIComponent(incident.id)}/report`} title="Open report / print">
+                            <Button size="sm" variant="outline">
+                              <Printer className="w-3 h-3" />
+                            </Button>
+                          </Link>
+
+                          {/* JSON EXPORT (kept from your version) */}
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setSelectedIncident(incident)}
+                            title="Export incident JSON"
+                            onClick={() => handleExportIncident(incident)}
                           >
-                            <Eye className="w-3 h-3" />
-                          </Button>
-                          <Button size="sm" variant="outline">
                             <FileText className="w-3 h-3" />
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredIncidents.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-sm text-gray-500 py-6">
+                        No incidents match your filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Incident Detail Modal/Card */}
+        {/* Inline quick-view card (kept) */}
         {selectedIncident && (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>Incident Details: {selectedIncident.id}</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedIncident(null)}
-                >
-                  Close
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExportIncident(selectedIncident)}
+                    title="Export this incident as JSON"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedIncident(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

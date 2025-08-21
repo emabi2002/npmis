@@ -1,13 +1,16 @@
-"use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CybercrimeStatsSection } from "@/components/dashboard/cybercrime-stats"
+"use client";
+
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+// ⬇️ Removed static import of CybercrimeStatsSection
+// import { CybercrimeStatsSection } from "@/components/dashboard/cybercrime-stats"
 import {
   Activity,
   AlertTriangle,
@@ -22,24 +25,42 @@ import {
   BarChart3,
   Eye,
   User as UserIcon,
-} from "lucide-react"
-import type { User } from "@/types/user"
+} from "lucide-react";
+import type { User } from "@/types/user";
+
+/** --- Feature flag / API presence guards --- */
+const ENABLE_CYBERCRIME = process.env.NEXT_PUBLIC_ENABLE_CYBERCRIME === "true";
+const HAS_CYBERCRIME_URL = !!process.env.NEXT_PUBLIC_CYBERCRIME_API_URL;
+
+/** --- Dynamically import the widget so it doesn't load during route prefetch --- */
+const CybercrimeStatsSection = ENABLE_CYBERCRIME && HAS_CYBERCRIME_URL
+  ? dynamic(
+      () =>
+        import("@/components/dashboard/cybercrime-stats").then(
+          (m) => m.CybercrimeStatsSection // named export
+        ),
+      {
+        ssr: false,          // client-only, avoids server eval
+        loading: () => null, // no skeleton; keep dashboard clean
+      }
+    )
+  : null;
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null)
-  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
+    const userData = localStorage.getItem("user");
     if (!userData) {
-      router.push("/")
-      return
+      router.push("/");
+      return;
     }
-    setUser(JSON.parse(userData))
-  }, [router])
+    setUser(JSON.parse(userData));
+  }, [router]);
 
   if (!user) {
-    return <div>Loading...</div>
+    return <div>Loading...</div>;
   }
 
   return (
@@ -121,8 +142,10 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Cybercrime Unit Integration */}
-        <CybercrimeStatsSection />
+        {/* Cybercrime Unit Integration (now lazy & gated) */}
+        {ENABLE_CYBERCRIME && HAS_CYBERCRIME_URL && CybercrimeStatsSection ? (
+          <CybercrimeStatsSection />
+        ) : null}
 
         {/* Recent Activity & Regional Status */}
         <div className="grid gap-6 md:grid-cols-2">
@@ -231,7 +254,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Unified Quick Links & Actions — moved to bottom */}
+        {/* Unified Quick Links & Actions */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -241,7 +264,6 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {/* Actions */}
               <Link href="/incidents/new">
                 <Button className="w-full justify-start bg-red-600 hover:bg-red-700">
                   <AlertTriangle className="w-4 h-4 mr-2" />
@@ -266,8 +288,6 @@ export default function DashboardPage() {
                   Search Criminal
                 </Button>
               </Link>
-
-              {/* Links */}
               <Link href="/analytics">
                 <Button variant="outline" className="w-full justify-start">
                   <BarChart3 className="w-4 h-4 mr-2" />
@@ -309,5 +329,5 @@ export default function DashboardPage() {
         </Card>
       </div>
     </DashboardLayout>
-  )
+  );
 }

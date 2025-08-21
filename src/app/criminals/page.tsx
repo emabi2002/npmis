@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import type { User as UserType } from "@/types/user"
 
+// NOTE: keep this local mock for now. You can switch to a shared data file later.
 const MOCK_CRIMINALS = [
   {
     id: "CRIM-001",
@@ -97,7 +98,12 @@ export default function CriminalsPage() {
             <h1 className="text-3xl font-bold text-gray-900">Criminal Records Database</h1>
             <p className="text-gray-600">Manage criminal profiles, history, and biometric data</p>
           </div>
-          <Button className="bg-red-600 hover:bg-red-700">
+          {/* NEW: route to the create profile page */}
+          <Button
+            className="bg-red-600 hover:bg-red-700"
+            onClick={() => router.push("/criminals/new")}
+            title="Create a new criminal profile"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Add Criminal Profile
           </Button>
@@ -280,7 +286,14 @@ export default function CriminalsPage() {
                     </TableCell>
                     <TableCell>{criminal.lastSeen}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm">
+                      {/* NEW: navigate to /criminals/[id] */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={`View ${criminal.name}`}
+                        aria-label={`View ${criminal.name}`}
+                        onClick={() => router.push(`/criminals/${encodeURIComponent(criminal.id)}`)}
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
                     </TableCell>

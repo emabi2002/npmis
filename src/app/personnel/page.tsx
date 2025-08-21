@@ -1,253 +1,233 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table"
-import {
-  Users,
-  Calendar,
-  Eye,
-  Filter,
-  Plus,
-  Search,
-  Shield,
-  BookOpen,
-  Award,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  TrendingUp,
-  User,
-  GraduationCap
-} from "lucide-react"
-import type { User as UserType } from "@/types/user"
+  Users, Calendar, Eye, Filter, Plus, Search, Shield,
+  BookOpen, Award, Clock, AlertTriangle, CheckCircle,
+  TrendingUp, GraduationCap
+} from "lucide-react";
+import type { User as UserType } from "@/types/user";
 
 const RANKS = {
-  "commissioner": { label: "Commissioner", level: 9, color: "bg-purple-600" },
-  "deputy_commissioner": { label: "Deputy Commissioner", level: 8, color: "bg-purple-500" },
-  "assistant_commissioner": { label: "Assistant Commissioner", level: 7, color: "bg-blue-600" },
-  "chief_superintendent": { label: "Chief Superintendent", level: 6, color: "bg-blue-500" },
-  "superintendent": { label: "Superintendent", level: 5, color: "bg-blue-400" },
-  "chief_inspector": { label: "Chief Inspector", level: 4, color: "bg-green-600" },
-  "inspector": { label: "Inspector", level: 3, color: "bg-green-500" },
-  "sergeant": { label: "Sergeant", level: 2, color: "bg-orange-500" },
-  "constable": { label: "Constable", level: 1, color: "bg-gray-500" }
-}
+  commissioner: { label: "Commissioner", level: 9, color: "bg-purple-600" },
+  deputy_commissioner: { label: "Deputy Commissioner", level: 8, color: "bg-purple-500" },
+  assistant_commissioner: { label: "Assistant Commissioner", level: 7, color: "bg-blue-600" },
+  chief_superintendent: { label: "Chief Superintendent", level: 6, color: "bg-blue-500" },
+  superintendent: { label: "Superintendent", level: 5, color: "bg-blue-400" },
+  chief_inspector: { label: "Chief Inspector", level: 4, color: "bg-green-600" },
+  inspector: { label: "Inspector", level: 3, color: "bg-green-500" },
+  sergeant: { label: "Sergeant", level: 2, color: "bg-orange-500" },
+  constable: { label: "Constable", level: 1, color: "bg-gray-500" }
+} as const;
 
 const DEPARTMENTS = {
-  "general_duties": "General Duties",
-  "cid": "Criminal Investigation Department",
-  "traffic": "Traffic Division",
-  "forensics": "Forensics Unit",
-  "cyber": "Cybercrime Unit",
-  "narcotics": "Narcotics Division",
-  "special_operations": "Special Operations",
-  "community": "Community Relations",
-  "internal_affairs": "Internal Affairs",
-  "administration": "Administration"
-}
+  general_duties: "General Duties",
+  cid: "Criminal Investigation Department",
+  traffic: "Traffic Division",
+  forensics: "Forensics Unit",
+  cyber: "Cybercrime Unit",
+  narcotics: "Narcotics Division",
+  special_operations: "Special Operations",
+  community: "Community Relations",
+  internal_affairs: "Internal Affairs",
+  administration: "Administration"
+} as const;
 
 const STATUS_OPTIONS = {
-  "active": { label: "Active Duty", color: "bg-green-500", variant: "default" as const },
-  "training": { label: "In Training", color: "bg-blue-500", variant: "default" as const },
-  "leave": { label: "On Leave", color: "bg-yellow-500", variant: "secondary" as const },
-  "suspended": { label: "Suspended", color: "bg-red-500", variant: "destructive" as const },
-  "retired": { label: "Retired", color: "bg-gray-500", variant: "secondary" as const },
-  "medical": { label: "Medical Leave", color: "bg-orange-500", variant: "default" as const }
-}
+  active: { label: "Active Duty", color: "bg-green-500", variant: "default" as const },
+  training: { label: "In Training", color: "bg-blue-500", variant: "default" as const },
+  leave: { label: "On Leave", color: "bg-yellow-500", variant: "secondary" as const },
+  suspended: { label: "Suspended", color: "bg-red-500", variant: "destructive" as const },
+  retired: { label: "Retired", color: "bg-gray-500", variant: "secondary" as const },
+  medical: { label: "Medical Leave", color: "bg-orange-500", variant: "default" as const }
+} as const;
 
-// Mock personnel data
-const MOCK_PERSONNEL = [
+/** ---- Types ---- */
+type Officer = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  badgeNumber: string;
+  station: string;
+  rank: keyof typeof RANKS;
+  department: keyof typeof DEPARTMENTS;
+  status: keyof typeof STATUS_OPTIONS;
+  yearsOfService: number;
+  performanceRating: "Excellent" | "Good" | "Needs Improvement";
+  commendations: number;
+  trainingCompleted: string[];
+  trainingDue: string[];
+  photo?: string | null;
+};
+
+/** ---- Mock data (sample 5 officers) ---- */
+const MOCK_PERSONNEL: Officer[] = [
   {
-    id: "OFF-001",
-    badgeNumber: "PNG12345",
-    firstName: "Sarah",
-    lastName: "Johnson",
+    id: "1",
+    firstName: "Maria",
+    lastName: "Kave",
+    badgeNumber: "PNG-0001",
+    station: "Port Moresby",
     rank: "inspector",
     department: "cid",
     status: "active",
-    dateJoined: "2018-03-15",
-    lastPromotion: "2022-01-10",
-    station: "Port Moresby Central",
-    email: "s.johnson@police.gov.pg",
-    phone: "+675 325 8901",
-    emergencyContact: "John Johnson - +675 325 8902",
-    specializations: ["Fraud Investigation", "Financial Crime"],
-    trainingCompleted: ["Advanced Detective Course", "Financial Crime Investigation"],
-    trainingDue: ["Crisis Negotiation"],
+    yearsOfService: 9,
     performanceRating: "Excellent",
-    commendations: 3,
-    disciplinaryActions: 0,
-    yearsOfService: 6,
+    commendations: 6,
+    trainingCompleted: ["Crime Scene Mgmt", "Interview & Interrogation"],
+    trainingDue: ["Digital Forensics"],
     photo: null
   },
   {
-    id: "OFF-002",
-    badgeNumber: "PNG67890",
-    firstName: "Michael",
-    lastName: "Kila",
+    id: "2",
+    firstName: "Peter",
+    lastName: "Hagen",
+    badgeNumber: "PNG-0372",
+    station: "Mt. Hagen",
     rank: "sergeant",
-    department: "general_duties",
+    department: "traffic",
+    status: "training",
+    yearsOfService: 5,
+    performanceRating: "Good",
+    commendations: 2,
+    trainingCompleted: ["Road Safety Ops"],
+    trainingDue: ["Advanced Pursuit"],
+    photo: null
+  },
+  {
+    id: "3",
+    firstName: "Lucy",
+    lastName: "Daru",
+    badgeNumber: "PNG-1120",
+    station: "Lae",
+    rank: "chief_inspector",
+    department: "special_operations",
     status: "active",
-    dateJoined: "2020-06-20",
-    lastPromotion: "2023-06-20",
-    station: "Lae Station",
-    email: "m.kila@police.gov.pg",
-    phone: "+675 472 1234",
-    emergencyContact: "Grace Kila - +675 472 1235",
-    specializations: ["Community Policing", "Youth Engagement"],
-    trainingCompleted: ["Basic Police Training", "Community Relations"],
-    trainingDue: ["Firearms Recertification"],
+    yearsOfService: 14,
+    performanceRating: "Excellent",
+    commendations: 8,
+    trainingCompleted: ["Tactical Command", "Incident Command System"],
+    trainingDue: [],
+    photo: null
+  },
+  {
+    id: "4",
+    firstName: "Jon",
+    lastName: "Bogia",
+    badgeNumber: "PNG-0844",
+    station: "Kokopo",
+    rank: "constable",
+    department: "community",
+    status: "leave",
+    yearsOfService: 2,
     performanceRating: "Good",
     commendations: 1,
-    disciplinaryActions: 0,
-    yearsOfService: 4,
+    trainingCompleted: ["Community Policing"],
+    trainingDue: ["Mediation"],
     photo: null
   },
   {
-    id: "OFF-003",
-    badgeNumber: "PNG11111",
-    firstName: "Grace",
-    lastName: "Temu",
-    rank: "constable",
-    department: "cyber",
-    status: "training",
-    dateJoined: "2023-01-15",
-    lastPromotion: null,
-    station: "Mt. Hagen Station",
-    email: "g.temu@police.gov.pg",
-    phone: "+675 542 3456",
-    emergencyContact: "Paul Temu - +675 542 3457",
-    specializations: ["Cybercrime", "Digital Forensics"],
-    trainingCompleted: ["Basic Police Training"],
-    trainingDue: ["Advanced Cybercrime Investigation", "Digital Evidence Handling"],
-    performanceRating: "Good",
-    commendations: 0,
-    disciplinaryActions: 0,
-    yearsOfService: 1,
-    photo: null
-  },
-  {
-    id: "OFF-004",
-    badgeNumber: "PNG22222",
-    firstName: "Robert",
-    lastName: "Namaliu",
-    rank: "chief_inspector",
-    department: "narcotics",
-    status: "active",
-    dateJoined: "2015-08-10",
-    lastPromotion: "2021-08-10",
-    station: "Port Moresby Central",
-    email: "r.namaliu@police.gov.pg",
-    phone: "+675 325 7890",
-    emergencyContact: "Mary Namaliu - +675 325 7891",
-    specializations: ["Drug Enforcement", "Organized Crime"],
-    trainingCompleted: ["Advanced Narcotics Investigation", "Undercover Operations"],
-    trainingDue: ["Leadership Development"],
-    performanceRating: "Excellent",
-    commendations: 5,
-    disciplinaryActions: 0,
-    yearsOfService: 9,
-    photo: null
-  },
-  {
-    id: "OFF-005",
-    badgeNumber: "PNG33333",
-    firstName: "Maria",
-    lastName: "Bani",
-    rank: "constable",
-    department: "traffic",
-    status: "leave",
-    dateJoined: "2022-02-01",
-    lastPromotion: null,
-    station: "Vanimo Station",
-    email: "m.bani@police.gov.pg",
-    phone: "+675 857 4567",
-    emergencyContact: "Peter Bani - +675 857 4568",
-    specializations: ["Traffic Enforcement", "Road Safety"],
-    trainingCompleted: ["Basic Police Training", "Traffic Law Enforcement"],
-    trainingDue: ["Accident Investigation"],
-    performanceRating: "Good",
-    commendations: 0,
-    disciplinaryActions: 0,
-    yearsOfService: 2,
+    id: "5",
+    firstName: "Anna",
+    lastName: "Tari",
+    badgeNumber: "PNG-2213",
+    station: "Tari",
+    rank: "superintendent",
+    department: "forensics",
+    status: "medical",
+    yearsOfService: 11,
+    performanceRating: "Needs Improvement",
+    commendations: 3,
+    trainingCompleted: ["Lab QA", "Evidence Chain"],
+    trainingDue: ["DNA Refresher"],
     photo: null
   }
-]
+];
 
 export default function PersonnelPage() {
-  const [user, setUser] = useState<UserType | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [rankFilter, setRankFilter] = useState("all")
-  const [departmentFilter, setDepartmentFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const router = useRouter()
+  const [user, setUser] = useState<UserType | null>(null);
+  const [checkedAuth, setCheckedAuth] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [rankFilter, setRankFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const router = useRouter();
+
+  /** Auth guard that waits for client hydration */
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    if (!userData) {
-      router.push("/")
-      return
-    }
-    setUser(JSON.parse(userData))
-  }, [router])
+    const userData = localStorage.getItem("user");
+    if (userData) setUser(JSON.parse(userData));
+    setCheckedAuth(true);
+  }, []);
 
-  if (!user) {
-    return <div>Loading...</div>
-  }
+  /** IMPORTANT: run hooks BEFORE any conditional return */
+  const filteredPersonnel = useMemo(() => {
+    return MOCK_PERSONNEL.filter((officer) => {
+      const fullName = `${officer.firstName} ${officer.lastName}`.toLowerCase();
+      const q = searchTerm.toLowerCase();
+      const matchesSearch =
+        fullName.includes(q) ||
+        officer.badgeNumber.toLowerCase().includes(q) ||
+        officer.station.toLowerCase().includes(q);
+      const matchesRank = rankFilter === "all" || officer.rank === (rankFilter as Officer["rank"]);
+      const matchesDepartment =
+        departmentFilter === "all" || officer.department === (departmentFilter as Officer["department"]);
+      const matchesStatus = statusFilter === "all" || officer.status === (statusFilter as Officer["status"]);
+      return matchesSearch && matchesRank && matchesDepartment && matchesStatus;
+    });
+  }, [searchTerm, rankFilter, departmentFilter, statusFilter]);
 
-  const filteredPersonnel = MOCK_PERSONNEL.filter(officer => {
-    const fullName = `${officer.firstName} ${officer.lastName}`.toLowerCase()
-    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
-                         officer.badgeNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         officer.station.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRank = rankFilter === "all" || officer.rank === rankFilter
-    const matchesDepartment = departmentFilter === "all" || officer.department === departmentFilter
-    const matchesStatus = statusFilter === "all" || officer.status === statusFilter
+  const goToOfficer = (idOrBadge: string) => router.push(`/personnel/${encodeURIComponent(idOrBadge)}`);
 
-    return matchesSearch && matchesRank && matchesDepartment && matchesStatus
-  })
+  const total = MOCK_PERSONNEL.length;
+  const avgYears =
+    total > 0
+      ? Math.round(MOCK_PERSONNEL.reduce((sum, o) => sum + o.yearsOfService, 0) / total)
+      : 0;
+  const totalDue =
+    total > 0 ? MOCK_PERSONNEL.reduce((sum, o) => sum + o.trainingDue.length, 0) : 0;
+
+  // Now it’s safe to conditionally return without changing hook order
+  if (!checkedAuth) return null;
+  if (!user) return <div className="p-6">Please sign in.</div>;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Personnel Administration</h1>
             <p className="text-gray-600">Manage officer records, training, and human resources</p>
           </div>
           <div className="flex gap-2">
-            <Link href="/personnel/training">
-              <Button variant="outline">
+            <Button asChild variant="outline" title="Open training schedule">
+              <Link href="/personnel/training">
                 <BookOpen className="w-4 h-4 mr-2" />
                 Training Schedule
-              </Button>
-            </Link>
-            <Link href="/personnel/new">
-              <Button className="bg-blue-600 hover:bg-blue-700">
+              </Link>
+            </Button>
+            <Button asChild className="bg-blue-600 hover:bg-blue-700" title="Add a new officer">
+              <Link href="/personnel/new">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Officer
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <div className="grid gap-4 md:grid-cols-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -255,7 +235,7 @@ export default function PersonnelPage() {
               <Users className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{MOCK_PERSONNEL.length}</div>
+              <div className="text-2xl font-bold">{total}</div>
               <p className="text-xs text-muted-foreground">Active personnel</p>
             </CardContent>
           </Card>
@@ -267,7 +247,7 @@ export default function PersonnelPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {MOCK_PERSONNEL.filter(o => o.status === "active").length}
+                {MOCK_PERSONNEL.filter((o) => o.status === "active").length}
               </div>
               <p className="text-xs text-muted-foreground">Active duty</p>
             </CardContent>
@@ -280,7 +260,7 @@ export default function PersonnelPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {MOCK_PERSONNEL.filter(o => o.status === "training").length}
+                {MOCK_PERSONNEL.filter((o) => o.status === "training").length}
               </div>
               <p className="text-xs text-muted-foreground">Training programs</p>
             </CardContent>
@@ -293,7 +273,7 @@ export default function PersonnelPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-yellow-600">
-                {MOCK_PERSONNEL.filter(o => ["leave", "medical"].includes(o.status)).length}
+                {MOCK_PERSONNEL.filter((o) => ["leave", "medical"].includes(o.status)).length}
               </div>
               <p className="text-xs text-muted-foreground">Various leave types</p>
             </CardContent>
@@ -305,9 +285,7 @@ export default function PersonnelPage() {
               <Award className="h-4 w-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">
-                {Math.round(MOCK_PERSONNEL.reduce((sum, o) => sum + o.yearsOfService, 0) / MOCK_PERSONNEL.length)}y
-              </div>
+              <div className="text-2xl font-bold text-purple-600">{avgYears}y</div>
               <p className="text-xs text-muted-foreground">Years of service</p>
             </CardContent>
           </Card>
@@ -318,9 +296,7 @@ export default function PersonnelPage() {
               <Clock className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">
-                {MOCK_PERSONNEL.reduce((sum, o) => sum + o.trainingDue.length, 0)}
-              </div>
+              <div className="text-2xl font-bold text-orange-600">{totalDue}</div>
               <p className="text-xs text-muted-foreground">Pending certifications</p>
             </CardContent>
           </Card>
@@ -337,7 +313,7 @@ export default function PersonnelPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-5">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Search officers..."
                   value={searchTerm}
@@ -347,9 +323,7 @@ export default function PersonnelPage() {
               </div>
 
               <Select value={rankFilter} onValueChange={setRankFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Rank" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Rank" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Ranks</SelectItem>
                   {Object.entries(RANKS).map(([key, { label }]) => (
@@ -359,9 +333,7 @@ export default function PersonnelPage() {
               </Select>
 
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Department" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
                   {Object.entries(DEPARTMENTS).map(([key, label]) => (
@@ -371,9 +343,7 @@ export default function PersonnelPage() {
               </Select>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   {Object.entries(STATUS_OPTIONS).map(([key, { label }]) => (
@@ -382,12 +352,15 @@ export default function PersonnelPage() {
                 </SelectContent>
               </Select>
 
-              <Button variant="outline" onClick={() => {
-                setSearchTerm("")
-                setRankFilter("all")
-                setDepartmentFilter("all")
-                setStatusFilter("all")
-              }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm("");
+                  setRankFilter("all");
+                  setDepartmentFilter("all");
+                  setStatusFilter("all");
+                }}
+              >
                 Clear Filters
               </Button>
             </div>
@@ -415,77 +388,94 @@ export default function PersonnelPage() {
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {filteredPersonnel.map((officer) => (
-                  <TableRow key={officer.id} className="hover:bg-gray-50">
-                    <TableCell>
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={officer.photo || undefined} />
-                        <AvatarFallback className="bg-blue-100 text-blue-800">
-                          {officer.firstName[0]}{officer.lastName[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                    </TableCell>
-                    <TableCell className="font-medium">{officer.badgeNumber}</TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{officer.firstName} {officer.lastName}</div>
-                        <div className="text-sm text-gray-500">{officer.yearsOfService} years service</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={RANKS[officer.rank as keyof typeof RANKS].color}>
-                        {RANKS[officer.rank as keyof typeof RANKS].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {DEPARTMENTS[officer.department as keyof typeof DEPARTMENTS]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_OPTIONS[officer.status as keyof typeof STATUS_OPTIONS].variant}>
-                        {STATUS_OPTIONS[officer.status as keyof typeof STATUS_OPTIONS].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{officer.station}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="flex items-center gap-1">
-                          {officer.performanceRating === "Excellent" ? (
-                            <CheckCircle className="w-3 h-3 text-green-500" />
-                          ) : officer.performanceRating === "Good" ? (
-                            <TrendingUp className="w-3 h-3 text-blue-500" />
-                          ) : (
-                            <AlertTriangle className="w-3 h-3 text-yellow-500" />
-                          )}
-                          {officer.performanceRating}
+                {filteredPersonnel.map((officer) => {
+                  const id = officer.id;
+                  const detailHref = `/personnel/${encodeURIComponent(id)}`;
+
+                  return (
+                    <TableRow
+                      key={officer.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => goToOfficer(id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={officer.photo || undefined} />
+                          <AvatarFallback className="bg-blue-100 text-blue-800">
+                            {officer.firstName[0]}{officer.lastName[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TableCell>
+
+                      <TableCell className="font-medium">{officer.badgeNumber}</TableCell>
+
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{officer.firstName} {officer.lastName}</div>
+                          <div className="text-sm text-gray-500">{officer.yearsOfService} years service</div>
                         </div>
-                        <div className="text-xs text-gray-500">{officer.commendations} commendations</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="text-green-600">{officer.trainingCompleted.length} completed</div>
-                        <div className="text-orange-600">{officer.trainingDue.length} due</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Link href={`/personnel/${officer.id}`}>
-                          <Button variant="ghost" size="sm">
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge className={RANKS[officer.rank].color}>
+                          {RANKS[officer.rank].label}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge variant="outline">
+                          {DEPARTMENTS[officer.department]}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge variant={STATUS_OPTIONS[officer.status].variant}>
+                          {STATUS_OPTIONS[officer.status].label}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-sm">{officer.station}</TableCell>
+
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="flex items-center gap-1">
+                            {officer.performanceRating === "Excellent" ? (
+                              <CheckCircle className="w-3 h-3 text-green-500" />
+                            ) : officer.performanceRating === "Good" ? (
+                              <TrendingUp className="w-3 h-3 text-blue-500" />
+                            ) : (
+                              <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                            )}
+                            {officer.performanceRating}
+                          </div>
+                          <div className="text-xs text-gray-500">{officer.commendations} commendations</div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="text-green-600">{officer.trainingCompleted.length} completed</div>
+                          <div className="text-orange-600">{officer.trainingDue.length} due</div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Button asChild variant="ghost" size="sm" title="View profile">
+                          <Link href={detailHref} aria-label={`View profile ${officer.badgeNumber}`}>
                             <Eye className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
-  )
+  );
 }

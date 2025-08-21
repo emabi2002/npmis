@@ -1,6 +1,8 @@
+// /src/app/incidents/missing-person/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -21,11 +23,9 @@ import {
   Camera,
   Users,
   Search,
-  Calendar,
   Send,
   CheckCircle,
   Eye,
-  Upload,
   Megaphone,
   Shield,
   Target,
@@ -157,6 +157,7 @@ export default function MissingPersonPage() {
   const [selectedCase, setSelectedCase] = useState<typeof MOCK_MISSING_PERSONS[0] | null>(null)
   const [showNewReport, setShowNewReport] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [cases, setCases] = useState(MOCK_MISSING_PERSONS) // <-- use state so UI updates
   const router = useRouter()
 
   // New report form state
@@ -200,13 +201,35 @@ export default function MissingPersonPage() {
 
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Generate case ID
     const caseId = `MP-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100).padStart(3, '0')}`
 
-    console.log("New Missing Person Report:", { ...newReport, id: caseId })
+    // add to local list so UI shows it immediately
+    setCases(prev => [
+      {
+        id: caseId,
+        name: newReport.name,
+        age: Number(newReport.age),
+        gender: newReport.gender as any,
+        category: newReport.category as any,
+        reportDate: new Date().toISOString().slice(0, 10),
+        lastSeen: `${newReport.lastSeenDate} ${newReport.lastSeenTime || ""}`.trim(),
+        location: newReport.location,
+        province: newReport.province,
+        description: newReport.description,
+        circumstances: newReport.circumstances,
+        reportedBy: newReport.reporterName,
+        reporterPhone: newReport.reporterPhone,
+        caseOfficer: "Unassigned",
+        status: "active",
+        amberAlert: MISSING_CATEGORIES[newReport.category as keyof typeof MISSING_CATEGORIES]?.amber || false,
+        mediaAttention: false,
+        searchTeams: 0,
+        tips: 0,
+        lastUpdate: new Date().toISOString().slice(0, 16).replace("T", " ")
+      },
+      ...prev
+    ])
 
-    // Reset form and close
     setNewReport({
       name: "", age: "", gender: "", category: "", lastSeenDate: "", lastSeenTime: "",
       location: "", province: "", description: "", circumstances: "", reporterName: "",
@@ -216,12 +239,10 @@ export default function MissingPersonPage() {
       isEndangered: false, suspectedAbduction: false, notes: ""
     })
     setShowNewReport(false)
-
-    // Show success message or redirect
     alert(`Missing person report ${caseId} created successfully`)
   }
 
-  const filteredCases = MOCK_MISSING_PERSONS.filter(person => {
+  const filteredCases = cases.filter(person => {
     const matchesSearch = person.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          person.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          person.location.toLowerCase().includes(searchTerm.toLowerCase())
@@ -251,6 +272,19 @@ export default function MissingPersonPage() {
     return MISSING_CATEGORIES[category as keyof typeof MISSING_CATEGORIES]?.color || "bg-gray-500"
   }
 
+  // mark selected case as found (local UI update)
+  const markSelectedFound = () => {
+    if (!selectedCase) return
+    const foundDate = new Date().toISOString().slice(0, 10)
+    const foundLocation = "Marked found (location to confirm)"
+    setCases(prev =>
+      prev.map(p =>
+        p.id === selectedCase.id ? { ...p, status: "found", foundDate, foundLocation } : p
+      )
+    )
+    setSelectedCase(prev => (prev ? { ...prev, status: "found", foundDate, foundLocation } as any : prev))
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -260,9 +294,12 @@ export default function MissingPersonPage() {
             <p className="text-gray-600">Manage and track missing person cases across Papua New Guinea</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <Megaphone className="w-4 h-4 mr-2" />
-              Broadcast Alert
+            {/* Broadcast now routes to the compose/print page */}
+            <Button variant="outline" asChild>
+              <Link href="/incidents/missing-person/broadcast">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Broadcast Alert
+              </Link>
             </Button>
             <Button
               onClick={() => setShowNewReport(true)}
@@ -283,7 +320,7 @@ export default function MissingPersonPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">
-                {MOCK_MISSING_PERSONS.filter(p => p.status === "active").length}
+                {cases.filter(p => p.status === "active").length}
               </div>
               <p className="text-xs text-muted-foreground">Currently missing</p>
             </CardContent>
@@ -296,7 +333,7 @@ export default function MissingPersonPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">
-                {MOCK_MISSING_PERSONS.filter(p => p.amberAlert && p.status === "active").length}
+                {cases.filter(p => p.amberAlert && p.status === "active").length}
               </div>
               <p className="text-xs text-muted-foreground">Critical alerts</p>
             </CardContent>
@@ -309,7 +346,7 @@ export default function MissingPersonPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {MOCK_MISSING_PERSONS.filter(p => p.status === "found").length}
+                {cases.filter(p => p.status === "found").length}
               </div>
               <p className="text-xs text-muted-foreground">This month</p>
             </CardContent>
@@ -322,7 +359,7 @@ export default function MissingPersonPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {MOCK_MISSING_PERSONS.filter(p => p.status === "active").reduce((sum, p) => sum + p.searchTeams, 0)}
+                {cases.filter(p => p.status === "active").reduce((sum, p) => sum + p.searchTeams, 0)}
               </div>
               <p className="text-xs text-muted-foreground">Active teams</p>
             </CardContent>
@@ -335,7 +372,7 @@ export default function MissingPersonPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">
-                {MOCK_MISSING_PERSONS.reduce((sum, p) => sum + p.tips, 0)}
+                {cases.reduce((sum, p) => sum + p.tips, 0)}
               </div>
               <p className="text-xs text-muted-foreground">Total received</p>
             </CardContent>
@@ -343,11 +380,11 @@ export default function MissingPersonPage() {
         </div>
 
         {/* AMBER Alert Banner */}
-        {MOCK_MISSING_PERSONS.some(p => p.amberAlert && p.status === "active") && (
+        {cases.some(p => p.amberAlert && p.status === "active") && (
           <Alert variant="destructive" className="border-red-500 bg-red-50">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              <strong>AMBER ALERT ACTIVE:</strong> {MOCK_MISSING_PERSONS.filter(p => p.amberAlert && p.status === "active").length} critical missing person case(s) require immediate public attention.
+              <strong>AMBER ALERT ACTIVE:</strong> {cases.filter(p => p.amberAlert && p.status === "active").length} critical missing person case(s) require immediate public attention.
             </AlertDescription>
           </Alert>
         )}
@@ -381,10 +418,10 @@ export default function MissingPersonPage() {
         {/* Cases Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="active">Active Cases ({MOCK_MISSING_PERSONS.filter(p => p.status === "active").length})</TabsTrigger>
-            <TabsTrigger value="amber">AMBER Alerts ({MOCK_MISSING_PERSONS.filter(p => p.amberAlert && p.status === "active").length})</TabsTrigger>
-            <TabsTrigger value="found">Found ({MOCK_MISSING_PERSONS.filter(p => p.status === "found").length})</TabsTrigger>
-            <TabsTrigger value="all">All Cases ({MOCK_MISSING_PERSONS.length})</TabsTrigger>
+            <TabsTrigger value="active">Active Cases ({cases.filter(p => p.status === "active").length})</TabsTrigger>
+            <TabsTrigger value="amber">AMBER Alerts ({cases.filter(p => p.amberAlert && p.status === "active").length})</TabsTrigger>
+            <TabsTrigger value="found">Found ({cases.filter(p => p.status === "found").length})</TabsTrigger>
+            <TabsTrigger value="all">All Cases ({cases.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="space-y-6">
@@ -471,9 +508,13 @@ export default function MissingPersonPage() {
                           <Badge variant={getStatusBadge(person.status)}>
                             {person.status.toUpperCase()}
                           </Badge>
-                          <Button size="sm">
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Case
+
+                          {/* View Case now navigates to detail route */}
+                          <Button size="sm" asChild>
+                            <Link href={`/incidents/missing-person/${encodeURIComponent(person.id)}`}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Case
+                            </Link>
                           </Button>
                         </div>
                       </div>
@@ -503,15 +544,19 @@ export default function MissingPersonPage() {
                   Case Details - {selectedCase.name}
                 </span>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Camera className="w-4 h-4 mr-2" />
-                    Photos
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/incidents/missing-person/${encodeURIComponent(selectedCase.id)}/photos`}>
+                      <Camera className="w-4 h-4 mr-2" />
+                      Photos
+                    </Link>
                   </Button>
-                  <Button variant="outline" size="sm">
-                    <Megaphone className="w-4 h-4 mr-2" />
-                    Broadcast
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/incidents/missing-person/broadcast?caseId=${encodeURIComponent(selectedCase.id)}`}>
+                      <Megaphone className="w-4 h-4 mr-2" />
+                      Broadcast
+                    </Link>
                   </Button>
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={markSelectedFound}>
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Mark Found
                   </Button>
@@ -625,11 +670,11 @@ export default function MissingPersonPage() {
                     </div>
                   </div>
 
-                  {selectedCase.status === "found" && selectedCase.foundDate && (
+                  {selectedCase.status === "found" && (selectedCase as any).foundDate && (
                     <Alert>
                       <CheckCircle className="h-4 w-4" />
                       <AlertDescription>
-                        <strong>FOUND SAFE:</strong> {selectedCase.name} was found on {selectedCase.foundDate} at {selectedCase.foundLocation}
+                        <strong>FOUND SAFE:</strong> {selectedCase.name} was found on {(selectedCase as any).foundDate} at {(selectedCase as any).foundLocation}
                       </AlertDescription>
                     </Alert>
                   )}

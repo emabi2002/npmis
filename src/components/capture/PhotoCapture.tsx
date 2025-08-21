@@ -1,632 +1,325 @@
-'use client'
+'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Camera,
-  Upload,
-  Download,
-  Trash2,
-  RotateCcw,
-  ZoomIn,
-  ZoomOut,
-  Zap,
-  ZapOff,
-  SwitchCamera,
-  MapPin,
-  Clock,
-  FileImage,
-  Fingerprint,
-  Eye,
-  Ruler,
-  Hash
-} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Camera, Eye, RefreshCw } from 'lucide-react';
 
-interface PhotoMetadata {
-  id: string
-  filename: string
-  timestamp: string
-  location?: { latitude: number; longitude: number }
-  device_info: string
-  camera_settings: {
-    flash: boolean
-    zoom: number
-    resolution: string
-    facing_mode: 'user' | 'environment'
-  }
-  evidence_info: {
-    category: string
-    description: string
-    chain_of_custody: string
-    photographer: string
-    witness?: string
-  }
-  analysis: {
-    file_size: number
-    dimensions: { width: number; height: number }
-    hash: string
-    quality_score: number
-  }
-}
+type Props = {
+  label: string;
+  value: string | null;
+  onChange: (val: string | null) => void;
+  facingMode?: 'user' | 'environment';
+  /** target aspect ratio for the snapshot (defaults to 3/4) */
+  aspect?: number;
+};
 
-interface CapturedPhoto {
-  id: string
-  blob: Blob
-  url: string
-  metadata: PhotoMetadata
-}
-
-interface PhotoCaptureProps {
-  onPhotosCapture: (photos: CapturedPhoto[]) => void
-  maxPhotos?: number
-  category: 'evidence' | 'mugshot' | 'scene' | 'vehicle' | 'document' | 'injury'
-  evidenceNumber?: string
-  incidentNumber?: string
-  photographer: string
-  allowMultiple?: boolean
-}
+type VideoDevice = { deviceId: string; label: string };
 
 export default function PhotoCapture({
-  onPhotosCapture,
-  maxPhotos = 10,
-  category,
-  evidenceNumber,
-  incidentNumber,
-  photographer,
-  allowMultiple = true
-}: PhotoCaptureProps) {
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([])
-  const [selectedPhoto, setSelectedPhoto] = useState<CapturedPhoto | null>(null)
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
-  const [flashEnabled, setFlashEnabled] = useState(false)
-  const [zoom, setZoom] = useState(1)
-  const [stream, setStream] = useState<MediaStream | null>(null)
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | undefined>(undefined)
-  const [deviceInfo, setDeviceInfo] = useState('')
+  label,
+  value,
+  onChange,
+  facingMode = 'environment',
+  aspect = 3 / 4,
+}: Props) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [devices, setDevices] = useState<VideoDevice[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<'auto' | string>('auto');
 
-  // Get device information
-  useEffect(() => {
-    const userAgent = navigator.userAgent
-    const platform = navigator.platform
-    setDeviceInfo(`${platform} - ${userAgent.slice(0, 100)}`)
-  }, [])
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // Get location
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          })
-        },
-        (error) => {
-          console.error('Error getting location:', error)
-        }
-      )
-    }
-  }, [])
+  const isSecure = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const host = window.location.hostname;
+    return window.isSecureContext || host === 'localhost' || host === '127.0.0.1';
+  }, []);
 
-  // Start camera
-  const startCamera = useCallback(async () => {
-    try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        audio: false
-      }
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-      setStream(mediaStream)
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-        videoRef.current.play()
-      }
-
-      setIsCapturing(true)
-    } catch (error) {
-      console.error('Error starting camera:', error)
-      alert('Unable to access camera. Please check permissions.')
-    }
-  }, [facingMode])
-
-  // Stop camera
+  // ----- helpers -----
   const stopCamera = useCallback(() => {
     if (stream) {
-      for (const track of stream.getTracks()) {
-        track.stop()
+      stream.getTracks().forEach((t) => t.stop());
+      setStream(null);
+    }
+  }, [stream]);
+
+  const attachStream = useCallback(async (s: MediaStream) => {
+    setStream(s);
+    const track = s.getVideoTracks()[0];
+    console.info('[PhotoCapture] using track:', {
+      label: track?.label,
+      settings: track?.getSettings?.(),
+    });
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = s;
+      try {
+        await videoRef.current.play();
+      } catch {
+        /* ignore */
       }
-      setStream(null)
     }
-    setIsCapturing(false)
-  }, [stream])
+  }, []);
 
-  // Switch camera
-  const switchCamera = useCallback(() => {
-    setFacingMode(prev => prev === 'user' ? 'environment' : 'user')
-    if (isCapturing) {
-      stopCamera()
-      setTimeout(() => {
-        startCamera()
-      }, 100)
+  const enumerate = useCallback(async () => {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const cams = list
+        .filter((d) => d.kind === 'videoinput')
+        .map((d) => ({ deviceId: d.deviceId, label: d.label || 'Camera' }));
+      setDevices(cams);
+      console.info('[PhotoCapture] video devices:', cams);
+    } catch (e) {
+      console.warn('[PhotoCapture] enumerateDevices failed:', e);
     }
-  }, [isCapturing, stopCamera, startCamera])
+  }, []);
 
-  // Calculate quality score based on resolution and file size
-  const calculateQualityScore = useCallback((width: number, height: number, fileSize: number): number => {
-    const pixels = width * height
-    const bitsPerPixel = (fileSize * 8) / pixels
+  const getConstraints = useCallback((): MediaStreamConstraints => {
+    const baseDims = { width: { ideal: 1280 }, height: { ideal: 960 } };
+    if (selectedDeviceId !== 'auto') {
+      return { video: { ...baseDims, deviceId: { exact: selectedDeviceId } }, audio: false };
+    }
+    return { video: { ...baseDims, facingMode: { ideal: facingMode } }, audio: false };
+  }, [selectedDeviceId, facingMode]);
 
-    // Score based on resolution and compression
-    let score = 0
-    if (pixels >= 2073600) score += 40 // 1920x1080 or higher
-    else if (pixels >= 921600) score += 30 // 1280x720
-    else if (pixels >= 307200) score += 20 // 640x480
-    else score += 10
+  // Try multiple fallbacks so laptops work reliably
+  const startCamera = useCallback(async () => {
+    setError(null);
 
-    if (bitsPerPixel >= 12) score += 30 // High quality
-    else if (bitsPerPixel >= 8) score += 20 // Medium quality
-    else score += 10 // Low quality
-
-    return Math.min(score, 100)
-  }, [])
-
-  // Capture photo
-  const capturePhoto = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return
-
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    const context = canvas.getContext('2d')
-
-    if (!context) return
-
-    // Set canvas dimensions to video dimensions
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-
-    // Apply flash effect
-    if (flashEnabled) {
-      const flashOverlay = document.createElement('div')
-      flashOverlay.style.position = 'fixed'
-      flashOverlay.style.top = '0'
-      flashOverlay.style.left = '0'
-      flashOverlay.style.width = '100%'
-      flashOverlay.style.height = '100%'
-      flashOverlay.style.backgroundColor = 'white'
-      flashOverlay.style.zIndex = '9999'
-      flashOverlay.style.opacity = '0.8'
-      document.body.appendChild(flashOverlay)
-
-      setTimeout(() => {
-        document.body.removeChild(flashOverlay)
-      }, 100)
+    if (!isSecure) {
+      setError('Camera requires HTTPS or http://localhost.');
+      return;
     }
 
-    // Draw video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    // stop any existing
+    stopCamera();
 
-    // Convert to blob
-    canvas.toBlob(async (blob) => {
-      if (!blob) return
+    const tryList: MediaStreamConstraints[] = [
+      getConstraints(),                    // facingMode or deviceId
+      { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }, // plain 720p
+      { video: true, audio: false },       // last resort
+    ];
 
-      const photoId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-      const url = URL.createObjectURL(blob)
-
-      // Calculate file hash (simplified)
-      const arrayBuffer = await blob.arrayBuffer()
-      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-
-      // Create metadata
-      const metadata: PhotoMetadata = {
-        id: photoId,
-        filename: `${category}_${photoId}.jpg`,
-        timestamp: new Date().toISOString(),
-        location,
-        device_info: deviceInfo,
-        camera_settings: {
-          flash: flashEnabled,
-          zoom,
-          resolution: `${canvas.width}x${canvas.height}`,
-          facing_mode: facingMode
-        },
-        evidence_info: {
-          category,
-          description: '',
-          chain_of_custody: photographer,
-          photographer,
-          witness: ''
-        },
-        analysis: {
-          file_size: blob.size,
-          dimensions: { width: canvas.width, height: canvas.height },
-          hash: hashHex,
-          quality_score: calculateQualityScore(canvas.width, canvas.height, blob.size)
-        }
+    for (const c of tryList) {
+      try {
+        console.info('[PhotoCapture] trying constraints:', c);
+        const s = await navigator.mediaDevices.getUserMedia(c);
+        await attachStream(s);
+        await enumerate(); // labels appear only after permission
+        setError(null);
+        return;
+      } catch (err: any) {
+        console.warn('[PhotoCapture] getUserMedia failed:', err?.name, err?.message);
+        setError(err?.message || String(err));
       }
-
-      const newPhoto: CapturedPhoto = {
-        id: photoId,
-        blob,
-        url,
-        metadata
-      }
-
-      setPhotos(prev => [...prev, newPhoto])
-
-      if (!allowMultiple || photos.length + 1 >= maxPhotos) {
-        stopCamera()
-      }
-    }, 'image/jpeg', 0.9)
-  }, [flashEnabled, zoom, facingMode, location, deviceInfo, category, photographer, allowMultiple, maxPhotos, photos.length, stopCamera, calculateQualityScore])
-
-  // Handle file upload
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files) return
-
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue
-
-      const photoId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-      const url = URL.createObjectURL(file)
-
-      // Get image dimensions
-      const img = new Image()
-      img.onload = async () => {
-        const arrayBuffer = await file.arrayBuffer()
-        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
-        const hashArray = Array.from(new Uint8Array(hashBuffer))
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-
-        const metadata: PhotoMetadata = {
-          id: photoId,
-          filename: file.name,
-          timestamp: new Date().toISOString(),
-          location,
-          device_info: deviceInfo,
-          camera_settings: {
-            flash: false,
-            zoom: 1,
-            resolution: `${img.width}x${img.height}`,
-            facing_mode: 'environment'
-          },
-          evidence_info: {
-            category,
-            description: '',
-            chain_of_custody: photographer,
-            photographer,
-            witness: ''
-          },
-          analysis: {
-            file_size: file.size,
-            dimensions: { width: img.width, height: img.height },
-            hash: hashHex,
-            quality_score: calculateQualityScore(img.width, img.height, file.size)
-          }
-        }
-
-        const newPhoto: CapturedPhoto = {
-          id: photoId,
-          blob: file,
-          url,
-          metadata
-        }
-
-        setPhotos(prev => [...prev, newPhoto])
-      }
-      img.src = url
     }
-  }, [location, deviceInfo, category, photographer, calculateQualityScore])
 
-  // Delete photo
-  const deletePhoto = useCallback((photoId: string) => {
-    setPhotos(prev => {
-      const updated = prev.filter(p => p.id !== photoId)
-      const photoToDelete = prev.find(p => p.id === photoId)
-      if (photoToDelete) {
-        URL.revokeObjectURL(photoToDelete.url)
-      }
-      return updated
-    })
-    if (selectedPhoto?.id === photoId) {
-      setSelectedPhoto(null)
+    setError(
+      'Unable to start the camera. Check browser permissions (lock icon → Site settings) and try again.'
+    );
+  }, [attachStream, enumerate, getConstraints, isSecure, stopCamera]);
+
+  const closeOverlay = useCallback(() => {
+    stopCamera();
+    setOpen(false);
+  }, [stopCamera]);
+
+  const capture = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+
+    const vw = v.videoWidth;
+    const vh = v.videoHeight;
+    if (!vw || !vh) {
+      setError('No video frames available. Try switching camera or allow permissions.');
+      return;
     }
-  }, [selectedPhoto])
 
-  // Update photo metadata
-  const updatePhotoMetadata = useCallback((photoId: string, updates: Partial<PhotoMetadata['evidence_info']>) => {
-    setPhotos(prev => prev.map(photo =>
-      photo.id === photoId
-        ? {
-            ...photo,
-            metadata: {
-              ...photo.metadata,
-              evidence_info: { ...photo.metadata.evidence_info, ...updates }
-            }
-          }
-        : photo
-    ))
-  }, [])
+    // center-crop to target aspect
+    const videoAspect = vw / vh;
+    let sx = 0, sy = 0, sw = vw, sh = vh;
 
-  // Submit photos
-  const submitPhotos = useCallback(() => {
-    onPhotosCapture(photos)
-  }, [photos, onPhotosCapture])
+    if (videoAspect > aspect) {
+      sw = Math.round(vh * aspect);
+      sx = Math.round((vw - sw) / 2);
+    } else {
+      sh = Math.round(vw / aspect);
+      sy = Math.round((vh - sh) / 2);
+    }
 
-  // Cleanup on unmount
+    c.width = sw;
+    c.height = sh;
+
+    ctx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh);
+    const dataUrl = c.toDataURL('image/jpeg', 0.92);
+
+    onChange(dataUrl);
+    closeOverlay();
+  }, [aspect, closeOverlay, onChange]);
+
+  // File upload fallback (mobile/desktop)
+  const onUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      // draw to canvas to honor the same aspect crop
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+
+      const iw = img.width, ih = img.height;
+      const imageAspect = iw / ih;
+      let sx = 0, sy = 0, sw = iw, sh = ih;
+
+      if (imageAspect > aspect) {
+        sw = Math.round(ih * aspect);
+        sx = Math.round((iw - sw) / 2);
+      } else {
+        sh = Math.round(iw / aspect);
+        sy = Math.round((ih - sh) / 2);
+      }
+
+      c.width = sw; c.height = sh;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      const dataUrl = c.toDataURL('image/jpeg', 0.92);
+      onChange(dataUrl);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }, [aspect, onChange]);
+
   useEffect(() => {
-    return () => {
-      stopCamera()
-      for (const photo of photos) {
-        URL.revokeObjectURL(photo.url)
-      }
-    }
-  }, [stopCamera, photos])
+    return () => stopCamera(); // cleanup
+  }, [stopCamera]);
+
+  const openAndStart = () => {
+    setOpen(true);
+    setTimeout(() => startCamera(), 20); // ensure overlay is in DOM
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Camera Controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Camera className="w-5 h-5" />
-            Photo Capture - {category.charAt(0).toUpperCase() + category.slice(1)}
-            {evidenceNumber && <Badge variant="outline">Evidence: {evidenceNumber}</Badge>}
-            {incidentNumber && <Badge variant="outline">Incident: {incidentNumber}</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {!isCapturing ? (
-              <Button onClick={startCamera} className="bg-green-600 hover:bg-green-700">
-                <Camera className="w-4 h-4 mr-2" />
-                Start Camera
-              </Button>
-            ) : (
-              <>
-                <Button onClick={capturePhoto} className="bg-blue-600 hover:bg-blue-700">
-                  <Camera className="w-4 h-4 mr-2" />
-                  Capture ({photos.length}/{maxPhotos})
-                </Button>
-                <Button onClick={stopCamera} variant="outline">
-                  Stop Camera
-                </Button>
-              </>
-            )}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-medium">{label}</div>
+        <Badge variant="outline">{facingMode === 'user' ? 'Front' : 'Rear'}</Badge>
+      </div>
 
-            <Button
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Files
+      {/* Tile */}
+      {!value ? (
+        <div className="rounded border border-dashed bg-muted/40 p-3">
+          <div className="flex items-center gap-2">
+            <Button onClick={openAndStart} className="bg-green-600 hover:bg-green-700">
+              <Camera className="w-4 h-4 mr-2" />
+              Start Camera
             </Button>
-
-            {isCapturing && (
-              <>
-                <Button variant="outline" onClick={switchCamera}>
-                  <SwitchCamera className="w-4 h-4 mr-2" />
-                  Switch Camera
-                </Button>
-                <Button
-                  variant={flashEnabled ? "default" : "outline"}
-                  onClick={() => setFlashEnabled(!flashEnabled)}
-                >
-                  {flashEnabled ? <Zap className="w-4 h-4 mr-2" /> : <ZapOff className="w-4 h-4 mr-2" />}
-                  Flash
-                </Button>
-              </>
-            )}
+            <Input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={onUpload}
+              className="max-w-[260px]"
+            />
           </div>
-
-          {/* Camera View */}
-          {isCapturing && (
-            <div className="relative border rounded-lg overflow-hidden bg-black">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-auto"
-                style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
-              />
-
-              {/* Camera overlay */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-4 left-4 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                  {facingMode === 'user' ? 'Front Camera' : 'Rear Camera'}
-                </div>
-                <div className="absolute top-4 right-4 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                  {new Date().toLocaleTimeString()}
-                </div>
-                {location && (
-                  <div className="absolute bottom-4 left-4 bg-black/50 text-white px-2 py-1 rounded text-sm flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <canvas ref={canvasRef} className="hidden" />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple={allowMultiple}
-            onChange={handleFileUpload}
-            className="hidden"
+          {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+        </div>
+      ) : (
+        <div>
+          <img
+            src={value}
+            alt={`${label} preview`}
+            className="w-full aspect-[3/2] object-cover rounded border"
           />
-        </CardContent>
-      </Card>
-
-      {/* Photo Gallery */}
-      {photos.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <FileImage className="w-5 h-5" />
-                Captured Photos ({photos.length})
-              </span>
-              <Button onClick={submitPhotos} className="bg-purple-600 hover:bg-purple-700">
-                Submit Photos
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {photos.map((photo) => (
-                <div key={photo.id} className="relative group">
-                  <img
-                    src={photo.url}
-                    alt={`Captured ${photo.metadata.filename}`}
-                    className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-80"
-                    onClick={() => setSelectedPhoto(photo)}
-                  />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setSelectedPhoto(photo)}
-                      >
-                        <Eye className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deletePhoto(photo.id)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="absolute top-1 right-1">
-                    <Badge
-                      variant={photo.metadata.analysis.quality_score >= 70 ? "default" :
-                               photo.metadata.analysis.quality_score >= 50 ? "secondary" : "destructive"}
-                      className="text-xs"
-                    >
-                      {photo.metadata.analysis.quality_score}%
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <div className="mt-2 flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => window.open(value, '_blank')}>
+              <Eye className="w-4 h-4 mr-1" />
+              View
+            </Button>
+            <Button variant="outline" size="sm" onClick={openAndStart}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Retake
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onChange(null)}>
+              Clear
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* Photo Details Modal */}
-      {selectedPhoto && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Photo Details</CardTitle>
-              <Button variant="outline" onClick={() => setSelectedPhoto(null)}>
-                Close
-              </Button>
+      {/* Overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-md bg-white shadow-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                {selectedDeviceId === 'auto'
+                  ? `Auto (${facingMode === 'user' ? 'front' : 'rear'})`
+                  : 'Selected camera'}
+              </div>
+
+              {/* Device picker (appears after permission) */}
+              {devices.length > 0 && (
+                <select
+                  className="border rounded px-2 py-1 text-sm"
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value as any)}
+                >
+                  <option value="auto">Auto (front/rear)</option>
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Photo Preview */}
-              <div>
-                <img
-                  src={selectedPhoto.url}
-                  alt={selectedPhoto.metadata.filename}
-                  className="w-full rounded border"
+
+            {error ? (
+              <div className="text-red-600 text-sm">{error}</div>
+            ) : (
+              <div className="relative rounded overflow-hidden bg-black min-h-[240px]">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-auto"
+                  style={{
+                    transform:
+                      selectedDeviceId === 'auto' && facingMode === 'user' ? 'scaleX(-1)' : 'none',
+                  }}
                 />
               </div>
+            )}
 
-              {/* Photo Metadata */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Filename</Label>
-                    <p className="text-sm font-mono">{selectedPhoto.metadata.filename}</p>
-                  </div>
-                  <div>
-                    <Label>Timestamp</Label>
-                    <p className="text-sm">{new Date(selectedPhoto.metadata.timestamp).toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <Label>Resolution</Label>
-                    <p className="text-sm">{selectedPhoto.metadata.camera_settings.resolution}</p>
-                  </div>
-                  <div>
-                    <Label>File Size</Label>
-                    <p className="text-sm">{(selectedPhoto.metadata.analysis.file_size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                  <div>
-                    <Label>Quality Score</Label>
-                    <p className="text-sm">{selectedPhoto.metadata.analysis.quality_score}%</p>
-                  </div>
-                  <div>
-                    <Label>Hash</Label>
-                    <p className="text-sm font-mono text-xs">{selectedPhoto.metadata.analysis.hash.substring(0, 16)}...</p>
-                  </div>
-                </div>
-
-                {selectedPhoto.metadata.location && (
-                  <div>
-                    <Label>Location</Label>
-                    <p className="text-sm">
-                      {selectedPhoto.metadata.location.latitude.toFixed(6)}, {selectedPhoto.metadata.location.longitude.toFixed(6)}
-                    </p>
-                  </div>
-                )}
-
-                {/* Evidence Information */}
-                <div className="space-y-3 border-t pt-4">
-                  <h4 className="font-medium">Evidence Information</h4>
-                  <div className="space-y-2">
-                    <div>
-                      <Label htmlFor={`description-${selectedPhoto.id}`}>Description</Label>
-                      <Textarea
-                        id={`description-${selectedPhoto.id}`}
-                        value={selectedPhoto.metadata.evidence_info.description}
-                        onChange={(e) => updatePhotoMetadata(selectedPhoto.id, { description: e.target.value })}
-                        placeholder="Describe what this photo shows..."
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`witness-${selectedPhoto.id}`}>Witness Present</Label>
-                      <Input
-                        id={`witness-${selectedPhoto.id}`}
-                        value={selectedPhoto.metadata.evidence_info.witness || ''}
-                        onChange={(e) => updatePhotoMetadata(selectedPhoto.id, { witness: e.target.value })}
-                        placeholder="Name of witness present during photo capture"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Button variant="outline" onClick={closeOverlay}>
+                Cancel
+              </Button>
+              <Button onClick={startCamera} variant="outline">
+                Restart
+              </Button>
+              <Button onClick={capture} disabled={!stream || !!error}>
+                <Camera className="w-4 h-4 mr-2" />
+                Capture
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
       )}
     </div>
-  )
+  );
 }

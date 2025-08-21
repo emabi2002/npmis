@@ -32,7 +32,7 @@ import {
   ExternalLink
 } from "lucide-react"
 import type { User } from "@/types/user"
-import { CYBERCRIME_URL } from "@/lib/urls"   // centralized URL
+import { CYBERCRIME_URL } from "@/lib/urls"
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -51,12 +51,9 @@ const navigation = [
   { name: "Fleet Management", href: "/fleet", icon: Car },
   { name: "Audit Trail", href: "/audit-trail", icon: History },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
-
-  // External app – uses centralized constant
   { name: "Cybercrime Unit", href: CYBERCRIME_URL, icon: Monitor, external: true },
 ]
 
-// Route → Title mapping for the top bar
 const pageNames: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/logbook": "Digital Occurrence Book",
@@ -69,8 +66,6 @@ const pageNames: Record<string, string> = {
   "/evidence": "Evidence Management",
   "/audit-trail": "Audit Trail",
   "/analytics": "Analytics",
-
-  // NEW: page title for Fleet module
   "/fleet": "Fleet Management",
 }
 
@@ -105,14 +100,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element
     )
   }
 
-  // compute the base path (e.g., "/incidents") and current title
   const basePath = "/" + (pathname?.split("/")[1] || "dashboard")
   const currentTitle = pageNames[basePath] ?? "Royal Papua New Guinea Constabulary"
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
-    <div
-      className={`flex flex-col h-full ${mobile ? "p-4" : ""} bg-gradient-to-b from-blue-900 via-blue-700 to-blue-300`}
-    >
+    <div className={`flex flex-col h-full ${mobile ? "p-4" : ""} bg-gradient-to-b from-blue-900 via-blue-700 to-blue-300`}>
       {/* Logo */}
       <div className="flex items-center gap-3 p-6 border-b border-white/20">
         <div className="relative w-12 h-12 rounded-lg overflow-hidden">
@@ -165,6 +157,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element
             <Link
               key={item.name}
               href={item.href}
+              /* ⬇️ Prevent Next.js from prefetching /dashboard bundle while on other pages */
+              prefetch={item.href === "/dashboard" ? false : undefined}
               className={linkClassName}
               onClick={() => mobile && setSidebarOpen(false)}
             >
@@ -183,7 +177,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element
               {user.name?.split(" ").map(n => n[0]).join("") || "U"}
             </AvatarFallback>
           </Avatar>
-        <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user.name}</p>
             <p className="text-xs text-gray-600">Badge #{user.badgeNumber}</p>
           </div>
@@ -206,7 +200,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Desktop Sidebar — soft vertical divider */}
+      {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-white/10">
         <Sidebar />
       </div>
