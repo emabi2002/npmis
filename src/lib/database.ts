@@ -333,3 +333,7 @@ class DatabaseService {
 /* Export both ways to satisfy all import styles */
 export { DatabaseService };
 export default DatabaseService;
+export interface Evidence {
+  // ...existing fields
+  metadata?: Record<string, unknown>; // <-- add this
+}

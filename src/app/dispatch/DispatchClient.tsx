@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +26,6 @@ import {
 import type { User as UserType } from "@/types/user";
 
 /* ------------------------------ Types & Data ------------------------------ */
-
 type RegionKey = "pom" | "lae" | "hagen";
 
 type Region = {
@@ -53,7 +52,7 @@ type DispatchRecord = {
   location: string;
   unit: string;
   notes?: string;
-  createdAt: string;            // ISO string
+  createdAt: string; // ISO string
   status: "Open" | "On Scene" | "Closed";
 };
 
@@ -75,52 +74,55 @@ function seedDemoUnits(): Unit[] {
   ];
 }
 
+/** Safe initial view without useSearchParams (no Suspense needed) */
+function getInitialView(): "units" | "dispatches" | "map" {
+  if (typeof window === "undefined") return "units";
+  const v = new URLSearchParams(window.location.search).get("view");
+  return v === "dispatches" || v === "map" || v === "units" ? v : "units";
+}
+
 export default function DispatchClient() {
+  const router = useRouter();
+
   const [user, setUser] = useState<UserType | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const router = useRouter();
-  const search = useSearchParams();
-
-  // Default tab can be controlled via /dispatch?view=dispatches (or map/units)
-  const viewParam = search.get("view");
-  const initialView =
-    viewParam === "dispatches" || viewParam === "map" || viewParam === "units"
-      ? (viewParam as "units" | "dispatches" | "map")
-      : "units";
 
   // DEMO data (swap to API/WebSocket later)
   const [units, setUnits] = useState<Unit[]>(seedDemoUnits());
+  const [savedDispatches, setSavedDispatches] = useState<DispatchRecord[]>([]);
 
-  // View tabs
-  const [selectedView, setSelectedView] = useState<"units" | "dispatches" | "map">(initialView);
-
-  // Map state
+  // View tabs / map controls
+  const [selectedView, setSelectedView] = useState<"units" | "dispatches" | "map">(getInitialView());
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>("pom");
   const [mapType, setMapType] = useState<"roadmap" | "hybrid">("roadmap");
   const [live, setLive] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  // Saved (new) dispatches
-  const [savedDispatches, setSavedDispatches] = useState<DispatchRecord[]>([]);
-
   // Google Maps
-  const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const [mapsReady, setMapsReady] = useState(false);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const infoRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
 
+  // Auth + local mock data
   useEffect(() => {
-    const raw = localStorage.getItem("user");
-    if (!raw) router.push("/");
-    else setUser(JSON.parse(raw));
-    setAuthChecked(true);
-
-    // Load any newly created dispatches
     try {
+      const raw = localStorage.getItem("user");
+      if (!raw) {
+        setAuthChecked(true);
+        router.replace("/");
+        return;
+      }
+      setUser(JSON.parse(raw));
       const d = localStorage.getItem("mock-dispatches");
       if (d) setSavedDispatches(JSON.parse(d));
-    } catch {}
+    } catch {
+      // ignore
+    } finally {
+      setAuthChecked(true);
+    }
   }, [router]);
 
   /* -------- Derived summaries -------- */
@@ -133,14 +135,18 @@ export default function DispatchClient() {
     });
   }, [units]);
 
-  const currentRegion = regionsSummary.find((r) => r.key === selectedRegion)!;
+  const currentRegion = useMemo(
+    () => regionsSummary.find((r) => r.key === selectedRegion)!,
+    [regionsSummary, selectedRegion]
+  );
 
-  /* -------- Initialize map when Map tab is opened -------- */
+  /* ------------------------ Google Maps lifecycle ------------------------ */
+  // Initialize map after script loads AND when Map tab is opened
   useEffect(() => {
-    if (selectedView !== "map") return;                   // only init in Map tab
+    if (selectedView !== "map") return;
     if (!GMAPS_KEY) return;
+    if (!mapsReady) return;
     if (mapRef.current || !mapDivRef.current) return;
-    if (!(window as any).google) return;
 
     mapRef.current = new (window as any).google.maps.Map(mapDivRef.current, {
       center: currentRegion.center,
@@ -151,7 +157,7 @@ export default function DispatchClient() {
       mapTypeControl: false,
     });
     infoRef.current = new (window as any).google.maps.InfoWindow();
-  }, [GMAPS_KEY, selectedView]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedView, GMAPS_KEY, mapsReady]); // mapType/center handled below
 
   // Recenter when region changes
   useEffect(() => {
@@ -166,7 +172,7 @@ export default function DispatchClient() {
   // Draw markers for current region
   useEffect(() => {
     if (!mapRef.current) return;
-
+    // clear
     Object.values(markersRef.current).forEach((m) => m.setMap(null));
     markersRef.current = {};
 
@@ -187,12 +193,12 @@ export default function DispatchClient() {
       marker.addListener("click", () => openInfo(u, marker));
       markersRef.current[u.id] = marker;
     }
-  }, [currentRegion.list]);
+  }, [currentRegion]);
 
   // DEMO live motion (replace with your live feed later)
   useEffect(() => {
     if (!live) return;
-    const id = setInterval(() => {
+    const id = window.setInterval(() => {
       setUnits((prev) =>
         prev.map((u) => {
           if (u.status !== "responding") return u;
@@ -221,7 +227,7 @@ export default function DispatchClient() {
     infoRef.current.open({ map: mapRef.current, anchor });
   }
 
-  /** Center map on a unit (from the left list) */
+  /** Center map on a unit (from list) */
   function focusUnit(u: Unit) {
     const m = markersRef.current[u.id];
     if (!m || !mapRef.current) return;
@@ -236,26 +242,306 @@ export default function DispatchClient() {
     setLastUpdate(new Date());
   }
 
-  /* --------- Guard to keep hooks order stable --------- */
-  if (!authChecked) return null;
-  if (!user) return null;
+  /* ------------------------------ Guards/UI ------------------------------ */
+  if (!authChecked) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">Loading…</div>
+      </DashboardLayout>
+    );
+  }
+  if (!user) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">Redirecting…</div>
+      </DashboardLayout>
+    );
+  }
 
+  // Safe, TS-friendly display name
+const u = user as any;
+
+const displayName: string =
+  u?.name ||
+  [u?.first_name ?? u?.firstName, u?.last_name ?? u?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() ||
+  u?.badge_number || // your DB interface uses snake_case
+  u?.badgeNumber ||  // but some mock/local data might be camelCase
+  "Officer";
+
+    /* -------------------------------- Render ------------------------------- */
   return (
     <DashboardLayout>
-      {/* Google Maps script; safe to load globally */}
       {GMAPS_KEY && (
-        <Script src={`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}`} strategy="afterInteractive" />
+        <Script
+          src={`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}`}
+          strategy="afterInteractive"
+          onLoad={() => setMapsReady(true)}
+        />
       )}
 
-      {/* …………………………… the rest of your JSX unchanged …………………………… */}
-      {/* Header, Stats, View Selector, Units/Dispatches/Map sections */}
-      {/* (All content from your previous component remains here) */}
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Dispatch Management</h1>
+            <p className="text-gray-600">Welcome, {displayName}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href="/incidents/new">
+                <Radio className="w-4 h-4 mr-2" />
+                Create Incident
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={resetDemo}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Reset Demo
+            </Button>
+          </div>
+        </div>
 
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* For brevity: keep exactly the JSX you posted earlier below   */}
-      {/* ───────────────────────────────────────────────────────────── */}
+        {/* Stats */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Units Active</CardTitle>
+              <Car className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{units.length}</div>
+              <p className="text-xs text-muted-foreground">Across all regions</p>
+            </CardContent>
+          </Card>
 
-      {/* >>> Paste the remainder of your JSX here (unchanged) <<< */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Available</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{units.filter(u => u.status === "available").length}</div>
+              <p className="text-xs text-muted-foreground">Ready to deploy</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Responding</CardTitle>
+              <Activity className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">{units.filter(u => u.status === "responding").length}</div>
+              <p className="text-xs text-muted-foreground">En route</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Alerts</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {savedDispatches.filter(d => d.priority !== "Routine").length}
+              </div>
+              <p className="text-xs text-muted-foreground">Emergency/Urgent</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* View Selector */}
+        <div className="flex gap-2">
+          <Button variant={selectedView === "units" ? "default" : "outline"} onClick={() => setSelectedView("units")}>
+            Units
+          </Button>
+          <Button
+            variant={selectedView === "dispatches" ? "default" : "outline"}
+            onClick={() => setSelectedView("dispatches")}
+          >
+            Dispatches
+          </Button>
+          <Button variant={selectedView === "map" ? "default" : "outline"} onClick={() => setSelectedView("map")}>
+            Map
+          </Button>
+        </div>
+
+        {/* Units View */}
+        {selectedView === "units" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Units by Region</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {regionsSummary.map((r) => (
+                <div key={r.key} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{r.name}</h3>
+                    <Badge variant="outline">{r.active} active</Badge>
+                    <Badge className="bg-green-600"> {r.available} available</Badge>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Callsign</TableHead>
+                        <TableHead>Plate</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Speed</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {r.list.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell>{u.callsign}</TableCell>
+                          <TableCell>{u.plate}</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                u.status === "available"
+                                  ? "bg-green-600"
+                                  : u.status === "responding"
+                                  ? "bg-orange-600"
+                                  : "bg-red-600"
+                              }
+                            >
+                              {u.status.replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{u.speedKph} km/h</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedView("map"); setSelectedRegion(r.key); setTimeout(() => focusUnit(u), 0); }}>
+                              <Eye className="w-4 h-4 mr-1" />
+                              Focus on Map
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dispatches View */}
+        {selectedView === "dispatches" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Dispatches</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {savedDispatches.length === 0 ? (
+                <div className="text-sm text-gray-600 p-4">No saved dispatches yet.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {savedDispatches.map((d) => (
+                      <TableRow key={d.id}>
+                        <TableCell>{d.id}</TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              d.priority === "Emergency"
+                                ? "bg-red-600"
+                                : d.priority === "Urgent"
+                                ? "bg-orange-600"
+                                : "bg-gray-600"
+                            }
+                          >
+                            {d.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{d.type}</TableCell>
+                        <TableCell className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-gray-400" />
+                          {d.location}
+                        </TableCell>
+                        <TableCell>{d.unit}</TableCell>
+                        <TableCell>{d.status}</TableCell>
+                        <TableCell>{new Date(d.createdAt).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Map View */}
+        {selectedView === "map" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Navigation className="w-5 h-5" />
+                Live Map
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <select
+                  className="border rounded px-2 py-1"
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value as RegionKey)}
+                >
+                  {REGIONS.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setMapType((t) => (t === "roadmap" ? "hybrid" : "roadmap"))}
+                >
+                  <Satellite className="w-4 h-4 mr-2" />
+                  Map: {mapType}
+                </Button>
+
+                <Button
+                  variant={live ? "default" : "outline"}
+                  onClick={() => setLive((v) => !v)}
+                >
+                  <Activity className="w-4 h-4 mr-2" />
+                  {live ? "Live" : "Paused"}
+                </Button>
+
+                <Button variant="outline" onClick={resetDemo}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reset
+                </Button>
+
+                <div className="ml-auto text-xs text-gray-500 flex items-center gap-1">
+                  <Timer className="w-3 h-3" />
+                  {lastUpdate ? `Last update ${lastUpdate.toLocaleTimeString()}` : "Waiting for updates…"}
+                </div>
+              </div>
+
+              <div ref={mapDivRef} className="h-[60vh] w-full rounded border" />
+
+              <div className="mt-2 text-xs text-gray-500">
+                Click a marker to view unit details.
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </DashboardLayout>
   );
 }

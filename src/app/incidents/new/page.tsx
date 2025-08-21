@@ -346,19 +346,23 @@ export default function NewIncidentPage() {
       }
 
       for (const photo of capturedPhotos) {
-        const filePath = await DatabaseService.uploadFile(photo.blob, "incident_photos", "incidents", incident.id);
-        await DatabaseService.createEvidence({
-          incident_id: incident.id,
-          evidence_type: "digital",
-          category: "photo",
-          description: photo.metadata?.evidence_info?.description || "Incident scene photograph",
-          collected_by: actorId,
-          photos: [filePath],
-          // @ts-expect-error: metadata is not part of strict Evidence type, but we store it
-          metadata: photo.metadata,
-        } as any);
-      }
+  const filePath = await DatabaseService.uploadFile(
+    photo.blob,
+    "incident_photos",
+    "incidents",
+    incident.id
+  );
 
+  await DatabaseService.createEvidence({
+    incident_id: incident.id,
+    evidence_type: "digital",
+    category: "photo",
+    description: photo.metadata?.evidence_info?.description ?? "Incident scene photograph",
+    collected_by: actorId,
+    photos: [filePath],
+    metadata: photo.metadata, // now typed
+  });
+}
       for (const biometric of capturedBiometrics) {
         // placeholder for specialized secure storage
         console.log("Storing biometric data:", biometric.type, biometric.quality_score);
