@@ -1,14 +1,14 @@
-// /src/app/dispatch/page.tsx  (or the equivalent folder you’re using)
-import NextDynamic from "next/dynamic";
+// /src/app/dispatch/page.tsx
+import { Suspense } from "react";
+import DispatchClient from "./DispatchClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const DispatchClient = NextDynamic(() => import("./DispatchClient"), {
-  ssr: false,
-  loading: () => <div className="p-6">Loading dispatch…</div>,
-});
-
 export default function Page() {
-  return <DispatchClient />;
+  return (
+    <Suspense fallback={<div className="p-6">Loading dispatch…</div>}>
+      <DispatchClient />
+    </Suspense>
+  );
 }
