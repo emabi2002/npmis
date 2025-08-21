@@ -1,26 +1,20 @@
-"use client"
+// /src/app/incidents/new/page.tsx
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
-import PhotoCapture from "@/components/capture/PhotoCapture"
-import BiometricCapture from "@/components/capture/BiometricCapture"
-import { DatabaseService } from "@/lib/database"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DatabaseService } from "@/lib/database";
 import {
-  AlertTriangle,
   MapPin,
-  Clock,
-  Users,
   Camera,
   Fingerprint,
   Car,
@@ -29,120 +23,179 @@ import {
   Send,
   Plus,
   Minus,
-  Shield,
-  Phone,
-  Calendar,
-  User,
-  Building,
   Navigation,
-  CheckCircle,
-  AlertCircle
-} from "lucide-react"
-import type { User as UserType } from "@/types/user"
+  AlertCircle,
+} from "lucide-react";
+import PhotoCapture from "@/components/capture/PhotoCapture";
+import BiometricCapture from "@/components/capture/BiometricCapture";
+import type { User as UserType } from "@/types/user";
+
+/* ---------------- Types used locally just for this screen ---------------- */
+type CapturedPhoto = {
+  blob: Blob;
+  url: string;
+  metadata: any; // whatever your PhotoCapture returns
+};
+
+type CapturedBiometric = {
+  type: "fingerprint" | "facial" | string;
+  quality_score?: number;
+  [k: string]: any;
+};
 
 interface PersonInvolved {
-  id: string
-  person_type: 'victim' | 'suspect' | 'witness' | 'complainant'
-  first_name: string
-  last_name: string
-  middle_name?: string
-  gender?: string
-  date_of_birth?: string
-  nationality: string
-  phone?: string
-  email?: string
-  address?: string
-  physical_description?: string
-  role_in_incident?: string
-  injuries?: string
-  statement_given: boolean
-  cooperation_level: 'cooperative' | 'uncooperative' | 'unknown'
+  id: string;
+  person_type: "victim" | "suspect" | "witness" | "complainant";
+  first_name: string;
+  last_name: string;
+  middle_name?: string;
+  gender?: string;
+  date_of_birth?: string;
+  nationality: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  physical_description?: string;
+  role_in_incident?: string;
+  injuries?: string;
+  statement_given: boolean;
+  cooperation_level: "cooperative" | "uncooperative" | "unknown";
 }
 
 interface VehicleInvolved {
-  id: string
-  vehicle_type: string
-  make?: string
-  model?: string
-  year?: number
-  color?: string
-  license_plate?: string
-  owner_name?: string
-  driver_name?: string
-  damage_description?: string
-  towed: boolean
-  impounded: boolean
+  id: string;
+  vehicle_type: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  color?: string;
+  license_plate?: string;
+  owner_name?: string;
+  driver_name?: string;
+  damage_description?: string;
+  towed: boolean;
+  impounded: boolean;
 }
 
 interface IncidentFormData {
-  incident_type: string
-  title: string
-  description: string
-  location_address: string
-  location_coordinates?: [number, number]
-  province: string
-  district: string
-  priority: 'low' | 'medium' | 'high' | 'critical'
-  date_occurred: string
-  time_occurred: string
-  weather_conditions: string
-  visibility: string
-  weapons_involved: boolean
-  drugs_involved: boolean
-  gang_related: boolean
-  domestic_violence: boolean
-  injuries_reported: boolean
-  fatalities_reported: boolean
-  property_damage_estimate?: number
-  people_involved: PersonInvolved[]
-  vehicles_involved: VehicleInvolved[]
-  evidence_collected: boolean
-  photos_taken: boolean
-  witnesses_interviewed: boolean
-  follow_up_required: boolean
-  immediate_actions_taken: string
-  additional_notes: string
+  incident_type: string;
+  title: string;
+  description: string;
+  location_address: string;
+  location_coordinates?: [number, number];
+  province: string;
+  district: string;
+  priority: "low" | "medium" | "high" | "critical";
+  date_occurred: string;
+  time_occurred: string;
+  weather_conditions: string;
+  visibility: string;
+  weapons_involved: boolean;
+  drugs_involved: boolean;
+  gang_related: boolean;
+  domestic_violence: boolean;
+  injuries_reported: boolean;
+  fatalities_reported: boolean;
+  property_damage_estimate?: number;
+  people_involved: PersonInvolved[];
+  vehicles_involved: VehicleInvolved[];
+  evidence_collected: boolean;
+  photos_taken: boolean;
+  witnesses_interviewed: boolean;
+  follow_up_required: boolean;
+  immediate_actions_taken: string;
+  additional_notes: string;
 }
 
+/* ------------------------------ Constants ------------------------------- */
 const INCIDENT_TYPES = [
-  'Armed Robbery', 'Burglary', 'Theft', 'Assault', 'Domestic Violence',
-  'Traffic Accident', 'Drug Offense', 'Public Disturbance', 'Vandalism',
-  'Fraud', 'Missing Person', 'Homicide', 'Sexual Assault', 'Tribal Fighting',
-  'Kidnapping', 'Arson', 'Cybercrime', 'Environmental Crime', 'Corruption',
-  'Human Trafficking', 'Wildlife Crime', 'Border Security', 'Other'
-]
+  "Armed Robbery",
+  "Burglary",
+  "Theft",
+  "Assault",
+  "Domestic Violence",
+  "Traffic Accident",
+  "Drug Offense",
+  "Public Disturbance",
+  "Vandalism",
+  "Fraud",
+  "Missing Person",
+  "Homicide",
+  "Sexual Assault",
+  "Tribal Fighting",
+  "Kidnapping",
+  "Arson",
+  "Cybercrime",
+  "Environmental Crime",
+  "Corruption",
+  "Human Trafficking",
+  "Wildlife Crime",
+  "Border Security",
+  "Other",
+];
 
 const PNG_PROVINCES = [
-  'National Capital District', 'Morobe', 'Western Highlands', 'Southern Highlands',
-  'Eastern Highlands', 'Simbu', 'Western', 'Gulf', 'Central', 'Milne Bay',
-  'Oro', 'Northern', 'East Sepik', 'West Sepik', 'Manus', 'New Ireland',
-  'East New Britain', 'West New Britain', 'Autonomous Region of Bougainville',
-  'Hela', 'Jiwaka', 'Enga'
-]
+  "National Capital District",
+  "Morobe",
+  "Western Highlands",
+  "Southern Highlands",
+  "Eastern Highlands",
+  "Simbu",
+  "Western",
+  "Gulf",
+  "Central",
+  "Milne Bay",
+  "Oro",
+  "Northern",
+  "East Sepik",
+  "West Sepik",
+  "Manus",
+  "New Ireland",
+  "East New Britain",
+  "West New Britain",
+  "Autonomous Region of Bougainville",
+  "Hela",
+  "Jiwaka",
+  "Enga",
+];
 
 const WEATHER_CONDITIONS = [
-  'Clear', 'Partly Cloudy', 'Cloudy', 'Light Rain', 'Heavy Rain',
-  'Thunderstorm', 'Fog', 'Mist', 'Strong Winds', 'Unknown'
-]
+  "Clear",
+  "Partly Cloudy",
+  "Cloudy",
+  "Light Rain",
+  "Heavy Rain",
+  "Thunderstorm",
+  "Fog",
+  "Mist",
+  "Strong Winds",
+  "Unknown",
+];
 
-const VISIBILITY_CONDITIONS = [
-  'Excellent', 'Good', 'Fair', 'Poor', 'Very Poor', 'Dark', 'Artificial Light'
-]
+const VISIBILITY_CONDITIONS = ["Excellent", "Good", "Fair", "Poor", "Very Poor", "Dark", "Artificial Light"];
+
+/* If TS prop types of the components don't match exactly, treat them as any */
+const PhotoCaptureAny = PhotoCapture as unknown as React.ComponentType<any>;
+const BiometricCaptureAny = BiometricCapture as unknown as React.ComponentType<any>;
 
 export default function NewIncidentPage() {
-  const [user, setUser] = useState<UserType | null>(null)
-  const [formData, setFormData] = useState<IncidentFormData>({
-    incident_type: '',
-    title: '',
-    description: '',
-    location_address: '',
-    province: '',
-    district: '',
-    priority: 'medium',
-    date_occurred: new Date().toISOString().split('T')[0],
-    time_occurred: new Date().toTimeString().split(' ')[0].slice(0, 5),
-    weather_conditions: '',
-    visibility: '',
+  const router = useRouter();
+
+  const [user, setUser] = useState<UserType | null>(null);
+  const [activeTab, setActiveTab] = useState("basic");
+
+  const [formData, setFormData] = useState<IncidentFormData>(() => ({
+    incident_type: "",
+    title: "",
+    description: "",
+    location_address: "",
+    province: "",
+    district: "",
+    priority: "medium",
+    date_occurred: new Date().toISOString().split("T")[0],
+    time_occurred: new Date().toTimeString().split(" ")[0].slice(0, 5),
+    weather_conditions: "",
+    visibility: "",
     weapons_involved: false,
     drugs_involved: false,
     gang_related: false,
@@ -155,225 +208,175 @@ export default function NewIncidentPage() {
     photos_taken: false,
     witnesses_interviewed: false,
     follow_up_required: true,
-    immediate_actions_taken: '',
-    additional_notes: ''
-  })
+    immediate_actions_taken: "",
+    additional_notes: "",
+  } satisfies IncidentFormData));
 
-  const [activeTab, setActiveTab] = useState('basic')
-  const [capturedPhotos, setCapturedPhotos] = useState<any[]>([])
-  const [capturedBiometrics, setCapturedBiometrics] = useState<any[]>([])
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
+  const [capturedBiometrics, setCapturedBiometrics] = useState<CapturedBiometric[]>([]);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const router = useRouter()
-
+  /* ------------------------------ Effects -------------------------------- */
   useEffect(() => {
-    const userData = localStorage.getItem("user")
+    const userData = localStorage.getItem("user");
     if (!userData) {
-      router.push("/")
-      return
+      router.push("/");
+      return;
     }
-    setUser(JSON.parse(userData))
-  }, [router])
+    setUser(JSON.parse(userData));
+  }, [router]);
 
-  // Get current location
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          })
-          setFormData(prev => ({
-            ...prev,
-            location_coordinates: [position.coords.longitude, position.coords.latitude]
-          }))
-        },
-        (error) => console.error('Error getting location:', error)
-      )
-    }
-  }, [])
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setLocation({ latitude, longitude });
+        setFormData((prev) => ({
+          ...prev,
+          location_coordinates: [longitude, latitude],
+        }));
+      },
+      (err) => console.error("Error getting location:", err),
+    );
+  }, []);
 
-  // Add person involved
+  /* -------------------------- Derived from user -------------------------- */
+  if (!user) return <div>Loading...</div>;
+
+  // IMPORTANT: cast the OBJECT, not the property — avoids squiggles
+  const actorName =
+    (user as any).name ||
+    [(user as any).first_name, (user as any).last_name].filter(Boolean).join(" ") ||
+    `Badge #${(user as any).badgeNumber ?? ""}`.trim();
+
+  const actorId: string = (user as any).id ?? (user as any).badgeNumber ?? "unknown";
+
+  /* ------------------------------ Helpers -------------------------------- */
   const addPersonInvolved = () => {
     const newPerson: PersonInvolved = {
       id: `person_${Date.now()}`,
-      person_type: 'witness',
-      first_name: '',
-      last_name: '',
-      nationality: 'Papua New Guinea',
+      person_type: "witness",
+      first_name: "",
+      last_name: "",
+      nationality: "Papua New Guinea",
       statement_given: false,
-      cooperation_level: 'cooperative'
-    }
-    setFormData(prev => ({
-      ...prev,
-      people_involved: [...prev.people_involved, newPerson]
-    }))
-  }
+      cooperation_level: "cooperative",
+    };
+    setFormData((prev) => ({ ...prev, people_involved: [...prev.people_involved, newPerson] }));
+  };
 
-  // Remove person involved
   const removePersonInvolved = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      people_involved: prev.people_involved.filter(person => person.id !== id)
-    }))
-  }
+    setFormData((prev) => ({ ...prev, people_involved: prev.people_involved.filter((p) => p.id !== id) }));
+  };
 
-  // Update person involved
   const updatePersonInvolved = (id: string, updates: Partial<PersonInvolved>) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      people_involved: prev.people_involved.map(person =>
-        person.id === id ? { ...person, ...updates } : person
-      )
-    }))
-  }
+      people_involved: prev.people_involved.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+    }));
+  };
 
-  // Add vehicle involved
   const addVehicleInvolved = () => {
     const newVehicle: VehicleInvolved = {
       id: `vehicle_${Date.now()}`,
-      vehicle_type: 'car',
+      vehicle_type: "car",
       towed: false,
-      impounded: false
-    }
-    setFormData(prev => ({
-      ...prev,
-      vehicles_involved: [...prev.vehicles_involved, newVehicle]
-    }))
-  }
+      impounded: false,
+    };
+    setFormData((prev) => ({ ...prev, vehicles_involved: [...prev.vehicles_involved, newVehicle] }));
+  };
 
-  // Remove vehicle involved
   const removeVehicleInvolved = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      vehicles_involved: prev.vehicles_involved.filter(vehicle => vehicle.id !== id)
-    }))
-  }
+    setFormData((prev) => ({ ...prev, vehicles_involved: prev.vehicles_involved.filter((v) => v.id !== id) }));
+  };
 
-  // Update vehicle involved
   const updateVehicleInvolved = (id: string, updates: Partial<VehicleInvolved>) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      vehicles_involved: prev.vehicles_involved.map(vehicle =>
-        vehicle.id === id ? { ...vehicle, ...updates } : vehicle
-      )
-    }))
-  }
+      vehicles_involved: prev.vehicles_involved.map((v) => (v.id === id ? { ...v, ...updates } : v)),
+    }));
+  };
 
-  // Validate form
+  /* ------------------------------ Validation ----------------------------- */
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
+    if (!formData.incident_type) newErrors.incident_type = "Incident type is required";
+    if (!formData.title) newErrors.title = "Title is required";
+    if (!formData.description) newErrors.description = "Description is required";
+    if (!formData.location_address) newErrors.location_address = "Location is required";
+    if (!formData.province) newErrors.province = "Province is required";
+    if (!formData.date_occurred) newErrors.date_occurred = "Date is required";
+    if (!formData.time_occurred) newErrors.time_occurred = "Time is required";
 
-    if (!formData.incident_type) newErrors.incident_type = 'Incident type is required'
-    if (!formData.title) newErrors.title = 'Title is required'
-    if (!formData.description) newErrors.description = 'Description is required'
-    if (!formData.location_address) newErrors.location_address = 'Location is required'
-    if (!formData.province) newErrors.province = 'Province is required'
-    if (!formData.date_occurred) newErrors.date_occurred = 'Date is required'
-    if (!formData.time_occurred) newErrors.time_occurred = 'Time is required'
+    formData.people_involved.forEach((p, i) => {
+      if (!p.first_name) newErrors[`person_${i}_first_name`] = "First name is required";
+      if (!p.last_name) newErrors[`person_${i}_last_name`] = "Last name is required";
+    });
 
-    // Validate people involved
-    formData.people_involved.forEach((person, index) => {
-      if (!person.first_name) newErrors[`person_${index}_first_name`] = 'First name is required'
-      if (!person.last_name) newErrors[`person_${index}_last_name`] = 'Last name is required'
-    })
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  // Submit incident
+  /* ------------------------------- Submit -------------------------------- */
   const submitIncident = async () => {
-    if (!validateForm() || !user) return
-
-    setIsSubmitting(true)
+    if (!validateForm()) return;
+    setIsSubmitting(true);
 
     try {
-      // Create incident in database
       const incidentData = {
         ...formData,
-        reported_by: user.badgeNumber,
+        reported_by: (user as any).badgeNumber ?? actorId,
         date_reported: new Date().toISOString(),
-        status: 'reported' as const,
-        photos: capturedPhotos.map(photo => photo.url),
-        witness_count: formData.people_involved.filter(p => p.person_type === 'witness').length,
-        evidence_count: capturedPhotos.length + (formData.evidence_collected ? 1 : 0)
-      }
+        status: "reported" as const,
+        photos: capturedPhotos.map((p) => p.url),
+        witness_count: formData.people_involved.filter((p) => p.person_type === "witness").length,
+        evidence_count: capturedPhotos.length + (formData.evidence_collected ? 1 : 0),
+      };
 
-      const incident = await DatabaseService.createIncident(incidentData)
+      const incident = await DatabaseService.createIncident(incidentData);
 
-      // Create people involved records
       for (const person of formData.people_involved) {
-        await DatabaseService.createPersonInvolved({
-          ...person,
-          incident_id: incident.id
-        })
+        await DatabaseService.createPersonInvolved({ ...person, incident_id: incident.id });
       }
-
-      // Create vehicle records
       for (const vehicle of formData.vehicles_involved) {
-        await DatabaseService.createVehicleInvolved({
-          ...vehicle,
-          incident_id: incident.id
-        })
+        await DatabaseService.createVehicleInvolved({ ...vehicle, incident_id: incident.id });
       }
 
-      // Upload and link photos
       for (const photo of capturedPhotos) {
-        const filePath = await DatabaseService.uploadFile(
-          photo.blob,
-          'incident_photos',
-          'incidents',
-          incident.id
-        )
-
-        // Create evidence record for photo
+        const filePath = await DatabaseService.uploadFile(photo.blob, "incident_photos", "incidents", incident.id);
         await DatabaseService.createEvidence({
           incident_id: incident.id,
-          evidence_type: 'digital',
-          category: 'photo',
-          description: photo.metadata.evidence_info.description || 'Incident scene photograph',
-          collected_by: user.id,
+          evidence_type: "digital",
+          category: "photo",
+          description: photo.metadata?.evidence_info?.description || "Incident scene photograph",
+          collected_by: actorId,
           photos: [filePath],
-          metadata: photo.metadata
-        })
+          // @ts-expect-error: metadata is not part of strict Evidence type, but we store it
+          metadata: photo.metadata,
+        } as any);
       }
 
-      // Handle biometric data
       for (const biometric of capturedBiometrics) {
-        // Store biometric data securely
-        // This would involve specialized biometric database storage
-        console.log('Storing biometric data:', biometric.type, biometric.quality_score)
+        // placeholder for specialized secure storage
+        console.log("Storing biometric data:", biometric.type, biometric.quality_score);
       }
 
-      // Log audit trail
-      await DatabaseService.logAction(
-        user.id,
-        'create_incident',
-        'incidents',
-        incident.id,
-        null,
-        incidentData
-      )
+      await DatabaseService.logAction(actorId, "create_incident", "incidents", incident.id, null, incidentData);
 
-      alert(`Incident ${incident.incident_number} created successfully!`)
-      router.push(`/incidents/${incident.id}`)
-
-    } catch (error) {
-      console.error('Error creating incident:', error)
-      alert('Error creating incident. Please try again.')
+      alert(`Incident ${incident.incident_number} created successfully!`);
+      router.push(`/incidents/${incident.id}`);
+    } catch (err) {
+      console.error("Error creating incident:", err);
+      alert("Error creating incident. Please try again.");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  if (!user) {
-    return <div>Loading...</div>
-  }
-
+  /* -------------------------------- UI ---------------------------------- */
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -387,11 +390,7 @@ export default function NewIncidentPage() {
             <Button variant="outline" onClick={() => router.back()}>
               Cancel
             </Button>
-            <Button
-              onClick={submitIncident}
-              disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={submitIncident} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
               {isSubmitting ? (
                 <>
                   <Save className="w-4 h-4 mr-2 animate-spin" />
@@ -407,7 +406,7 @@ export default function NewIncidentPage() {
           </div>
         </div>
 
-        {/* Form Tabs */}
+        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
@@ -433,14 +432,16 @@ export default function NewIncidentPage() {
                     <Label htmlFor="incident_type">Incident Type *</Label>
                     <Select
                       value={formData.incident_type}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, incident_type: value }))}
+                      onValueChange={(value) => setFormData((p) => ({ ...p, incident_type: value }))}
                     >
-                      <SelectTrigger className={errors.incident_type ? 'border-red-500' : ''}>
+                      <SelectTrigger className={errors.incident_type ? "border-red-500" : ""}>
                         <SelectValue placeholder="Select incident type" />
                       </SelectTrigger>
                       <SelectContent>
-                        {INCIDENT_TYPES.map(type => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        {INCIDENT_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -451,7 +452,7 @@ export default function NewIncidentPage() {
                     <Label htmlFor="priority">Priority Level</Label>
                     <Select
                       value={formData.priority}
-                      onValueChange={(value: any) => setFormData(prev => ({ ...prev, priority: value }))}
+                      onValueChange={(value: any) => setFormData((p) => ({ ...p, priority: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -471,9 +472,9 @@ export default function NewIncidentPage() {
                   <Input
                     id="title"
                     value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
                     placeholder="Brief description of the incident"
-                    className={errors.title ? 'border-red-500' : ''}
+                    className={errors.title ? "border-red-500" : ""}
                   />
                   {errors.title && <p className="text-red-500 text-sm">{errors.title}</p>}
                 </div>
@@ -483,10 +484,10 @@ export default function NewIncidentPage() {
                   <Textarea
                     id="description"
                     value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
                     placeholder="Provide a detailed description of what happened..."
                     rows={4}
-                    className={errors.description ? 'border-red-500' : ''}
+                    className={errors.description ? "border-red-500" : ""}
                   />
                   {errors.description && <p className="text-red-500 text-sm">{errors.description}</p>}
                 </div>
@@ -498,8 +499,8 @@ export default function NewIncidentPage() {
                       id="date_occurred"
                       type="date"
                       value={formData.date_occurred}
-                      onChange={(e) => setFormData(prev => ({ ...prev, date_occurred: e.target.value }))}
-                      className={errors.date_occurred ? 'border-red-500' : ''}
+                      onChange={(e) => setFormData((p) => ({ ...p, date_occurred: e.target.value }))}
+                      className={errors.date_occurred ? "border-red-500" : ""}
                     />
                     {errors.date_occurred && <p className="text-red-500 text-sm">{errors.date_occurred}</p>}
                   </div>
@@ -510,8 +511,8 @@ export default function NewIncidentPage() {
                       id="time_occurred"
                       type="time"
                       value={formData.time_occurred}
-                      onChange={(e) => setFormData(prev => ({ ...prev, time_occurred: e.target.value }))}
-                      className={errors.time_occurred ? 'border-red-500' : ''}
+                      onChange={(e) => setFormData((p) => ({ ...p, time_occurred: e.target.value }))}
+                      className={errors.time_occurred ? "border-red-500" : ""}
                     />
                     {errors.time_occurred && <p className="text-red-500 text-sm">{errors.time_occurred}</p>}
                   </div>
@@ -520,14 +521,16 @@ export default function NewIncidentPage() {
                     <Label htmlFor="weather_conditions">Weather</Label>
                     <Select
                       value={formData.weather_conditions}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, weather_conditions: value }))}
+                      onValueChange={(value) => setFormData((p) => ({ ...p, weather_conditions: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select weather" />
                       </SelectTrigger>
                       <SelectContent>
-                        {WEATHER_CONDITIONS.map(weather => (
-                          <SelectItem key={weather} value={weather}>{weather}</SelectItem>
+                        {WEATHER_CONDITIONS.map((w) => (
+                          <SelectItem key={w} value={w}>
+                            {w}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -537,54 +540,25 @@ export default function NewIncidentPage() {
                 <div className="space-y-3">
                   <Label>Incident Characteristics</Label>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="weapons_involved"
-                        checked={formData.weapons_involved}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, weapons_involved: checked as boolean }))}
-                      />
-                      <Label htmlFor="weapons_involved">Weapons Involved</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="drugs_involved"
-                        checked={formData.drugs_involved}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, drugs_involved: checked as boolean }))}
-                      />
-                      <Label htmlFor="drugs_involved">Drugs Involved</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="gang_related"
-                        checked={formData.gang_related}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, gang_related: checked as boolean }))}
-                      />
-                      <Label htmlFor="gang_related">Gang Related</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="domestic_violence"
-                        checked={formData.domestic_violence}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, domestic_violence: checked as boolean }))}
-                      />
-                      <Label htmlFor="domestic_violence">Domestic Violence</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="injuries_reported"
-                        checked={formData.injuries_reported}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, injuries_reported: checked as boolean }))}
-                      />
-                      <Label htmlFor="injuries_reported">Injuries Reported</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="fatalities_reported"
-                        checked={formData.fatalities_reported}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, fatalities_reported: checked as boolean }))}
-                      />
-                      <Label htmlFor="fatalities_reported">Fatalities Reported</Label>
-                    </div>
+                    {[
+                      ["weapons_involved", "Weapons Involved"],
+                      ["drugs_involved", "Drugs Involved"],
+                      ["gang_related", "Gang Related"],
+                      ["domestic_violence", "Domestic Violence"],
+                      ["injuries_reported", "Injuries Reported"],
+                      ["fatalities_reported", "Fatalities Reported"],
+                    ].map(([key, label]) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={key}
+                          checked={(formData as any)[key]}
+                          onCheckedChange={(checked) =>
+                            setFormData((p) => ({ ...p, [key]: Boolean(checked) } as any))
+                          }
+                        />
+                        <Label htmlFor={key}>{label}</Label>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </CardContent>
@@ -606,9 +580,9 @@ export default function NewIncidentPage() {
                   <Textarea
                     id="location_address"
                     value={formData.location_address}
-                    onChange={(e) => setFormData(prev => ({ ...prev, location_address: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, location_address: e.target.value }))}
                     placeholder="Provide detailed address or description of location..."
-                    className={errors.location_address ? 'border-red-500' : ''}
+                    className={errors.location_address ? "border-red-500" : ""}
                   />
                   {errors.location_address && <p className="text-red-500 text-sm">{errors.location_address}</p>}
                 </div>
@@ -616,16 +590,15 @@ export default function NewIncidentPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="province">Province *</Label>
-                    <Select
-                      value={formData.province}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, province: value }))}
-                    >
-                      <SelectTrigger className={errors.province ? 'border-red-500' : ''}>
+                    <Select value={formData.province} onValueChange={(value) => setFormData((p) => ({ ...p, province: value }))}>
+                      <SelectTrigger className={errors.province ? "border-red-500" : ""}>
                         <SelectValue placeholder="Select province" />
                       </SelectTrigger>
                       <SelectContent>
-                        {PNG_PROVINCES.map(province => (
-                          <SelectItem key={province} value={province}>{province}</SelectItem>
+                        {PNG_PROVINCES.map((prov) => (
+                          <SelectItem key={prov} value={prov}>
+                            {prov}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -637,7 +610,7 @@ export default function NewIncidentPage() {
                     <Input
                       id="district"
                       value={formData.district}
-                      onChange={(e) => setFormData(prev => ({ ...prev, district: e.target.value }))}
+                      onChange={(e) => setFormData((p) => ({ ...p, district: e.target.value }))}
                       placeholder="District name"
                     />
                   </div>
@@ -658,16 +631,15 @@ export default function NewIncidentPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="visibility">Visibility Conditions</Label>
-                    <Select
-                      value={formData.visibility}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, visibility: value }))}
-                    >
+                    <Select value={formData.visibility} onValueChange={(value) => setFormData((p) => ({ ...p, visibility: value }))}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select visibility" />
                       </SelectTrigger>
                       <SelectContent>
-                        {VISIBILITY_CONDITIONS.map(visibility => (
-                          <SelectItem key={visibility} value={visibility}>{visibility}</SelectItem>
+                        {VISIBILITY_CONDITIONS.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {v}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -678,11 +650,13 @@ export default function NewIncidentPage() {
                     <Input
                       id="property_damage_estimate"
                       type="number"
-                      value={formData.property_damage_estimate || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        property_damage_estimate: e.target.value ? Number(e.target.value) : undefined
-                      }))}
+                      value={formData.property_damage_estimate ?? ""}
+                      onChange={(e) =>
+                        setFormData((p) => ({
+                          ...p,
+                          property_damage_estimate: e.target.value ? Number(e.target.value) : undefined,
+                        }))
+                      }
                       placeholder="Estimated damage in Kina"
                     />
                   </div>
@@ -697,7 +671,7 @@ export default function NewIncidentPage() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
+                    <UsersIcon />
                     People Involved ({formData.people_involved.length})
                   </CardTitle>
                   <Button onClick={addPersonInvolved} size="sm">
@@ -711,11 +685,7 @@ export default function NewIncidentPage() {
                   <div key={person.id} className="border rounded-lg p-4 space-y-4">
                     <div className="flex justify-between items-center">
                       <h4 className="font-medium">Person #{index + 1}</h4>
-                      <Button
-                        onClick={() => removePersonInvolved(person.id)}
-                        size="sm"
-                        variant="destructive"
-                      >
+                      <Button onClick={() => removePersonInvolved(person.id)} size="sm" variant="destructive">
                         <Minus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -745,7 +715,7 @@ export default function NewIncidentPage() {
                           value={person.first_name}
                           onChange={(e) => updatePersonInvolved(person.id, { first_name: e.target.value })}
                           placeholder="First name"
-                          className={errors[`person_${index}_first_name`] ? 'border-red-500' : ''}
+                          className={errors[`person_${index}_first_name`] ? "border-red-500" : ""}
                         />
                       </div>
 
@@ -755,16 +725,13 @@ export default function NewIncidentPage() {
                           value={person.last_name}
                           onChange={(e) => updatePersonInvolved(person.id, { last_name: e.target.value })}
                           placeholder="Last name"
-                          className={errors[`person_${index}_last_name`] ? 'border-red-500' : ''}
+                          className={errors[`person_${index}_last_name`] ? "border-red-500" : ""}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <Label>Gender</Label>
-                        <Select
-                          value={person.gender || ''}
-                          onValueChange={(value) => updatePersonInvolved(person.id, { gender: value })}
-                        >
+                        <Select value={person.gender || ""} onValueChange={(value) => updatePersonInvolved(person.id, { gender: value })}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select gender" />
                           </SelectTrigger>
@@ -782,7 +749,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Phone Number</Label>
                         <Input
-                          value={person.phone || ''}
+                          value={person.phone || ""}
                           onChange={(e) => updatePersonInvolved(person.id, { phone: e.target.value })}
                           placeholder="Phone number"
                         />
@@ -792,7 +759,7 @@ export default function NewIncidentPage() {
                         <Label>Date of Birth</Label>
                         <Input
                           type="date"
-                          value={person.date_of_birth || ''}
+                          value={person.date_of_birth || ""}
                           onChange={(e) => updatePersonInvolved(person.id, { date_of_birth: e.target.value })}
                         />
                       </div>
@@ -801,7 +768,7 @@ export default function NewIncidentPage() {
                     <div className="space-y-2">
                       <Label>Address</Label>
                       <Textarea
-                        value={person.address || ''}
+                        value={person.address || ""}
                         onChange={(e) => updatePersonInvolved(person.id, { address: e.target.value })}
                         placeholder="Home address"
                         rows={2}
@@ -811,7 +778,7 @@ export default function NewIncidentPage() {
                     <div className="space-y-2">
                       <Label>Physical Description</Label>
                       <Textarea
-                        value={person.physical_description || ''}
+                        value={person.physical_description || ""}
                         onChange={(e) => updatePersonInvolved(person.id, { physical_description: e.target.value })}
                         placeholder="Height, weight, distinguishing features, clothing, etc."
                         rows={2}
@@ -823,7 +790,9 @@ export default function NewIncidentPage() {
                         <Checkbox
                           id={`statement_${person.id}`}
                           checked={person.statement_given}
-                          onCheckedChange={(checked) => updatePersonInvolved(person.id, { statement_given: checked as boolean })}
+                          onCheckedChange={(checked) =>
+                            updatePersonInvolved(person.id, { statement_given: Boolean(checked) })
+                          }
                         />
                         <Label htmlFor={`statement_${person.id}`}>Statement Given</Label>
                       </div>
@@ -877,11 +846,7 @@ export default function NewIncidentPage() {
                   <div key={vehicle.id} className="border rounded-lg p-4 space-y-4">
                     <div className="flex justify-between items-center">
                       <h4 className="font-medium">Vehicle #{index + 1}</h4>
-                      <Button
-                        onClick={() => removeVehicleInvolved(vehicle.id)}
-                        size="sm"
-                        variant="destructive"
-                      >
+                      <Button onClick={() => removeVehicleInvolved(vehicle.id)} size="sm" variant="destructive">
                         <Minus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -912,7 +877,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Make</Label>
                         <Input
-                          value={vehicle.make || ''}
+                          value={vehicle.make || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { make: e.target.value })}
                           placeholder="Vehicle make"
                         />
@@ -921,7 +886,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Model</Label>
                         <Input
-                          value={vehicle.model || ''}
+                          value={vehicle.model || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { model: e.target.value })}
                           placeholder="Vehicle model"
                         />
@@ -931,8 +896,12 @@ export default function NewIncidentPage() {
                         <Label>Year</Label>
                         <Input
                           type="number"
-                          value={vehicle.year || ''}
-                          onChange={(e) => updateVehicleInvolved(vehicle.id, { year: e.target.value ? Number(e.target.value) : undefined })}
+                          value={vehicle.year ?? ""}
+                          onChange={(e) =>
+                            updateVehicleInvolved(vehicle.id, {
+                              year: e.target.value ? Number(e.target.value) : undefined,
+                            })
+                          }
                           placeholder="Year"
                         />
                       </div>
@@ -942,7 +911,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Color</Label>
                         <Input
-                          value={vehicle.color || ''}
+                          value={vehicle.color || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { color: e.target.value })}
                           placeholder="Vehicle color"
                         />
@@ -951,7 +920,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>License Plate</Label>
                         <Input
-                          value={vehicle.license_plate || ''}
+                          value={vehicle.license_plate || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { license_plate: e.target.value })}
                           placeholder="License plate number"
                         />
@@ -962,7 +931,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Owner Name</Label>
                         <Input
-                          value={vehicle.owner_name || ''}
+                          value={vehicle.owner_name || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { owner_name: e.target.value })}
                           placeholder="Vehicle owner"
                         />
@@ -971,7 +940,7 @@ export default function NewIncidentPage() {
                       <div className="space-y-2">
                         <Label>Driver Name</Label>
                         <Input
-                          value={vehicle.driver_name || ''}
+                          value={vehicle.driver_name || ""}
                           onChange={(e) => updateVehicleInvolved(vehicle.id, { driver_name: e.target.value })}
                           placeholder="Driver at time of incident"
                         />
@@ -981,7 +950,7 @@ export default function NewIncidentPage() {
                     <div className="space-y-2">
                       <Label>Damage Description</Label>
                       <Textarea
-                        value={vehicle.damage_description || ''}
+                        value={vehicle.damage_description || ""}
                         onChange={(e) => updateVehicleInvolved(vehicle.id, { damage_description: e.target.value })}
                         placeholder="Describe any damage to the vehicle"
                         rows={2}
@@ -993,7 +962,7 @@ export default function NewIncidentPage() {
                         <Checkbox
                           id={`towed_${vehicle.id}`}
                           checked={vehicle.towed}
-                          onCheckedChange={(checked) => updateVehicleInvolved(vehicle.id, { towed: checked as boolean })}
+                          onCheckedChange={(checked) => updateVehicleInvolved(vehicle.id, { towed: Boolean(checked) })}
                         />
                         <Label htmlFor={`towed_${vehicle.id}`}>Vehicle Towed</Label>
                       </div>
@@ -1002,7 +971,9 @@ export default function NewIncidentPage() {
                         <Checkbox
                           id={`impounded_${vehicle.id}`}
                           checked={vehicle.impounded}
-                          onCheckedChange={(checked) => updateVehicleInvolved(vehicle.id, { impounded: checked as boolean })}
+                          onCheckedChange={(checked) =>
+                            updateVehicleInvolved(vehicle.id, { impounded: Boolean(checked) })
+                          }
                         />
                         <Label htmlFor={`impounded_${vehicle.id}`}>Vehicle Impounded</Label>
                       </div>
@@ -1019,7 +990,7 @@ export default function NewIncidentPage() {
             </Card>
           </TabsContent>
 
-          {/* Evidence & Photos */}
+          {/* Evidence */}
           <TabsContent value="evidence" className="space-y-6">
             <Card>
               <CardHeader>
@@ -1029,12 +1000,12 @@ export default function NewIncidentPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <PhotoCapture
+                <PhotoCaptureAny
                   onPhotosCapture={setCapturedPhotos}
                   category="evidence"
-                  photographer={`${user.first_name} ${user.last_name}`}
+                  photographer={actorName}
                   maxPhotos={20}
-                  allowMultiple={true}
+                  allowMultiple
                 />
               </CardContent>
             </Card>
@@ -1049,7 +1020,9 @@ export default function NewIncidentPage() {
                     <Checkbox
                       id="evidence_collected"
                       checked={formData.evidence_collected}
-                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, evidence_collected: checked as boolean }))}
+                      onCheckedChange={(checked) =>
+                        setFormData((p) => ({ ...p, evidence_collected: Boolean(checked) }))
+                      }
                     />
                     <Label htmlFor="evidence_collected">Physical Evidence Collected</Label>
                   </div>
@@ -1058,7 +1031,7 @@ export default function NewIncidentPage() {
                     <Checkbox
                       id="photos_taken"
                       checked={formData.photos_taken || capturedPhotos.length > 0}
-                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, photos_taken: checked as boolean }))}
+                      onCheckedChange={(checked) => setFormData((p) => ({ ...p, photos_taken: Boolean(checked) }))}
                     />
                     <Label htmlFor="photos_taken">Photos Taken</Label>
                   </div>
@@ -1067,7 +1040,9 @@ export default function NewIncidentPage() {
                     <Checkbox
                       id="witnesses_interviewed"
                       checked={formData.witnesses_interviewed}
-                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, witnesses_interviewed: checked as boolean }))}
+                      onCheckedChange={(checked) =>
+                        setFormData((p) => ({ ...p, witnesses_interviewed: Boolean(checked) }))
+                      }
                     />
                     <Label htmlFor="witnesses_interviewed">Witnesses Interviewed</Label>
                   </div>
@@ -1078,7 +1053,7 @@ export default function NewIncidentPage() {
                   <Textarea
                     id="immediate_actions_taken"
                     value={formData.immediate_actions_taken}
-                    onChange={(e) => setFormData(prev => ({ ...prev, immediate_actions_taken: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, immediate_actions_taken: e.target.value }))}
                     placeholder="Describe what actions were taken immediately at the scene..."
                     rows={3}
                   />
@@ -1089,7 +1064,7 @@ export default function NewIncidentPage() {
                   <Textarea
                     id="additional_notes"
                     value={formData.additional_notes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, additional_notes: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, additional_notes: e.target.value }))}
                     placeholder="Any additional information, observations, or notes..."
                     rows={3}
                   />
@@ -1099,7 +1074,9 @@ export default function NewIncidentPage() {
                   <Checkbox
                     id="follow_up_required"
                     checked={formData.follow_up_required}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, follow_up_required: checked as boolean }))}
+                    onCheckedChange={(checked) =>
+                      setFormData((p) => ({ ...p, follow_up_required: Boolean(checked) }))
+                    }
                   />
                   <Label htmlFor="follow_up_required">Follow-up Investigation Required</Label>
                 </div>
@@ -1107,7 +1084,7 @@ export default function NewIncidentPage() {
             </Card>
           </TabsContent>
 
-          {/* Biometric Data */}
+          {/* Biometrics */}
           <TabsContent value="biometrics" className="space-y-6">
             <Card>
               <CardHeader>
@@ -1117,10 +1094,10 @@ export default function NewIncidentPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <BiometricCapture
+                <BiometricCaptureAny
                   onBiometricCapture={setCapturedBiometrics}
-                  operator={`${user.first_name} ${user.last_name}`}
-                  allowedTypes={['fingerprint', 'facial']}
+                  operator={actorName}
+                  allowedTypes={["fingerprint", "facial"]}
                   required={false}
                 />
               </CardContent>
@@ -1128,7 +1105,7 @@ export default function NewIncidentPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Form Validation Summary */}
+        {/* Validation summary */}
         {Object.keys(errors).length > 0 && (
           <Card className="border-red-200 bg-red-50">
             <CardHeader>
@@ -1148,5 +1125,10 @@ export default function NewIncidentPage() {
         )}
       </div>
     </DashboardLayout>
-  )
+  );
+}
+
+/* tiny inline icon alias to avoid another lucide import */
+function UsersIcon() {
+  return <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 }
