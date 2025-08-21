@@ -1,4 +1,4 @@
-// /src/app/incidents/missing-person/broadcast/page.tsx
+// src/app/incidents/missing-person/broadcast/BroadcastClient.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -15,14 +15,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Megaphone, ArrowLeft, Printer, Download } from "lucide-react";
 
 type Channel = "sms" | "radio" | "tv" | "social" | "email";
+type Urgency = "critical" | "high" | "normal";
 
-export default function BroadcastPage() {
+export default function BroadcastClient() {
   const router = useRouter();
   const params = useSearchParams();
   const caseId = params.get("caseId") || "";
 
   const [title, setTitle] = useState("AMBER Alert: Missing Person");
-  const [urgency, setUrgency] = useState<"critical" | "high" | "normal">("critical");
+  const [urgency, setUrgency] = useState<Urgency>("critical");
   const [regions, setRegions] = useState("National Capital District, Central, Gulf");
   const [channels, setChannels] = useState<Record<Channel, boolean>>({
     sms: true,
@@ -38,10 +39,11 @@ export default function BroadcastPage() {
   // Lightweight prefill if a caseId is provided
   useEffect(() => {
     if (caseId) {
-      setTitle((t) => `AMBER Alert: ${caseId}`);
-      setMessage((m) =>
-        `Police have issued an AMBER Alert for case ${caseId}. ` +
-        `If you have information, call 111 immediately. Do not approach—report location and details.`
+      setTitle(() => `AMBER Alert: ${caseId}`);
+      setMessage(
+        () =>
+          `Police have issued an AMBER Alert for case ${caseId}. ` +
+          `If you have information, call 111 immediately. Do not approach—report location and details.`
       );
     }
   }, [caseId]);
@@ -134,9 +136,9 @@ export default function BroadcastPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Urgency</Label>
-                  <Select value={urgency} onValueChange={(v: any) => setUrgency(v)}>
+                  <Select value={urgency} onValueChange={(v) => setUrgency(v as Urgency)}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select urgency" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="critical">Critical</SelectItem>
