@@ -81,6 +81,14 @@ function getInitialView(): "units" | "dispatches" | "map" {
   return v === "dispatches" || v === "map" || v === "units" ? v : "units";
 }
 
+/** keep URL in sync w/o Next hooks (avoids Suspense) */
+function setQueryParam(name: string, value: string) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.set(name, value);
+  window.history.replaceState(null, "", url.toString());
+}
+
 export default function DispatchClient() {
   const router = useRouter();
 
@@ -119,7 +127,7 @@ export default function DispatchClient() {
       const d = localStorage.getItem("mock-dispatches");
       if (d) setSavedDispatches(JSON.parse(d));
     } catch {
-      // ignore
+      /* noop */
     } finally {
       setAuthChecked(true);
     }
@@ -140,6 +148,11 @@ export default function DispatchClient() {
     [regionsSummary, selectedRegion]
   );
 
+  /* keep the URL up to date (no Suspense) */
+  useEffect(() => {
+    setQueryParam("view", selectedView);
+  }, [selectedView]);
+
   /* ------------------------ Google Maps lifecycle ------------------------ */
   // Initialize map after script loads AND when Map tab is opened
   useEffect(() => {
@@ -148,7 +161,10 @@ export default function DispatchClient() {
     if (!mapsReady) return;
     if (mapRef.current || !mapDivRef.current) return;
 
-    mapRef.current = new (window as any).google.maps.Map(mapDivRef.current, {
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    mapRef.current = new google.maps.Map(mapDivRef.current, {
       center: currentRegion.center,
       zoom: 12,
       mapTypeId: mapType,
@@ -156,7 +172,7 @@ export default function DispatchClient() {
       fullscreenControl: true,
       mapTypeControl: false,
     });
-    infoRef.current = new (window as any).google.maps.InfoWindow();
+    infoRef.current = new google.maps.InfoWindow();
   }, [selectedView, GMAPS_KEY, mapsReady]); // mapType/center handled below
 
   // Recenter when region changes
@@ -169,21 +185,23 @@ export default function DispatchClient() {
     if (mapRef.current) mapRef.current.setMapTypeId(mapType);
   }, [mapType]);
 
-  // Draw markers for current region
+  // Draw markers for current region (and when units move)
   useEffect(() => {
     if (!mapRef.current) return;
-    // clear
-    Object.values(markersRef.current).forEach((m) => m.setMap(null));
+
+    // clear previous markers
+    Object.values(markersRef.current).forEach((m: any) => m.setMap(null));
     markersRef.current = {};
 
+    const google = (window as any).google;
     for (const u of currentRegion.list) {
       const color = u.status === "available" ? "#16a34a" : u.status === "responding" ? "#f59e0b" : "#dc2626";
-      const marker = new (window as any).google.maps.Marker({
+      const marker = new google.maps.Marker({
         position: { lat: u.lat, lng: u.lng },
         map: mapRef.current,
         title: `${u.callsign} (${u.plate})`,
         icon: {
-          path: (window as any).google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 5,
           strokeColor: color,
           fillColor: color,
@@ -231,7 +249,8 @@ export default function DispatchClient() {
   function focusUnit(u: Unit) {
     const m = markersRef.current[u.id];
     if (!m || !mapRef.current) return;
-    mapRef.current.setCenter(new (window as any).google.maps.LatLng(u.lat, u.lng));
+    const google = (window as any).google;
+    mapRef.current.setCenter(new google.maps.LatLng(u.lat, u.lng));
     mapRef.current.setZoom(14);
     openInfo(u, m);
   }
@@ -259,30 +278,38 @@ export default function DispatchClient() {
   }
 
   // Safe, TS-friendly display name
-const u = user as any;
+  const u = user as any;
+  const displayName: string =
+    u?.name ||
+    [u?.first_name ?? u?.firstName, u?.last_name ?? u?.lastName].filter(Boolean).join(" ").trim() ||
+    u?.badge_number ||
+    u?.badgeNumber ||
+    "Officer";
 
-const displayName: string =
-  u?.name ||
-  [u?.first_name ?? u?.firstName, u?.last_name ?? u?.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim() ||
-  u?.badge_number || // your DB interface uses snake_case
-  u?.badgeNumber ||  // but some mock/local data might be camelCase
-  "Officer";
-
-    /* -------------------------------- Render ------------------------------- */
+  /* -------------------------------- Render ------------------------------- */
   return (
     <DashboardLayout>
-      {GMAPS_KEY && (
+      {/* Load Maps script (client only). Add &libraries if you later use places, geometry, etc. */}
+      {!!GMAPS_KEY && (
         <Script
+          id="gmaps-js"
           src={`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}`}
           strategy="afterInteractive"
           onLoad={() => setMapsReady(true)}
+          onError={(e) => {
+            console.error("Google Maps script failed to load", e);
+            setMapsReady(false);
+          }}
         />
       )}
 
-      <div className="space-y-6">
+      {!GMAPS_KEY && (
+        <div className="mx-6 mt-4 mb-0 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <b>Maps key missing.</b> Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in your environment (Netlify) and redeploy.
+        </div>
+      )}
+
+      <div className="space-y-6 p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -322,7 +349,9 @@ const displayName: string =
               <CheckCircle className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{units.filter(u => u.status === "available").length}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {units.filter((u) => u.status === "available").length}
+              </div>
               <p className="text-xs text-muted-foreground">Ready to deploy</p>
             </CardContent>
           </Card>
@@ -333,7 +362,9 @@ const displayName: string =
               <Activity className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{units.filter(u => u.status === "responding").length}</div>
+              <div className="text-2xl font-bold text-orange-600">
+                {units.filter((u) => u.status === "responding").length}
+              </div>
               <p className="text-xs text-muted-foreground">En route</p>
             </CardContent>
           </Card>
@@ -345,7 +376,7 @@ const displayName: string =
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">
-                {savedDispatches.filter(d => d.priority !== "Routine").length}
+                {savedDispatches.filter((d) => d.priority !== "Routine").length}
               </div>
               <p className="text-xs text-muted-foreground">Emergency/Urgent</p>
             </CardContent>
@@ -354,7 +385,10 @@ const displayName: string =
 
         {/* View Selector */}
         <div className="flex gap-2">
-          <Button variant={selectedView === "units" ? "default" : "outline"} onClick={() => setSelectedView("units")}>
+          <Button
+            variant={selectedView === "units" ? "default" : "outline"}
+            onClick={() => setSelectedView("units")}
+          >
             Units
           </Button>
           <Button
@@ -363,9 +397,12 @@ const displayName: string =
           >
             Dispatches
           </Button>
-          <Button variant={selectedView === "map" ? "default" : "outline"} onClick={() => setSelectedView("map")}>
-            Map
-          </Button>
+        <Button
+          variant={selectedView === "map" ? "default" : "outline"}
+          onClick={() => setSelectedView("map")}
+        >
+          Map
+        </Button>
         </div>
 
         {/* Units View */}
@@ -412,7 +449,16 @@ const displayName: string =
                           </TableCell>
                           <TableCell>{u.speedKph} km/h</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => { setSelectedView("map"); setSelectedRegion(r.key); setTimeout(() => focusUnit(u), 0); }}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedView("map");
+                                setSelectedRegion(r.key);
+                                // focus after map paints
+                                setTimeout(() => focusUnit(u), 0);
+                              }}
+                            >
                               <Eye className="w-4 h-4 mr-1" />
                               Focus on Map
                             </Button>
@@ -493,6 +539,16 @@ const displayName: string =
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {!GMAPS_KEY && (
+                <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded">
+                  Add <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to see the map.
+                </div>
+              )}
+
+              {GMAPS_KEY && !mapsReady && (
+                <div className="text-sm text-gray-600 p-2">Loading Google Maps…</div>
+              )}
+
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <select
                   className="border rounded px-2 py-1"
@@ -506,18 +562,12 @@ const displayName: string =
                   ))}
                 </select>
 
-                <Button
-                  variant="outline"
-                  onClick={() => setMapType((t) => (t === "roadmap" ? "hybrid" : "roadmap"))}
-                >
+                <Button variant="outline" onClick={() => setMapType((t) => (t === "roadmap" ? "hybrid" : "roadmap"))}>
                   <Satellite className="w-4 h-4 mr-2" />
                   Map: {mapType}
                 </Button>
 
-                <Button
-                  variant={live ? "default" : "outline"}
-                  onClick={() => setLive((v) => !v)}
-                >
+                <Button variant={live ? "default" : "outline"} onClick={() => setLive((v) => !v)}>
                   <Activity className="w-4 h-4 mr-2" />
                   {live ? "Live" : "Paused"}
                 </Button>
@@ -535,9 +585,7 @@ const displayName: string =
 
               <div ref={mapDivRef} className="h-[60vh] w-full rounded border" />
 
-              <div className="mt-2 text-xs text-gray-500">
-                Click a marker to view unit details.
-              </div>
+              <div className="mt-2 text-xs text-gray-500">Click a marker to view unit details.</div>
             </CardContent>
           </Card>
         )}
